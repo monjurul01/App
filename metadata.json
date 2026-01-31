@@ -1,0 +1,7 @@
+{
+  "name": "Signtech Salary Manager",
+  "description": "A TallyKhata-style salary management app for digital print shops with employee tracking, attendance, overtime, and automated salary slip generation.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
