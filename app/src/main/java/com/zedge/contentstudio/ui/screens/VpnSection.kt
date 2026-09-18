@@ -108,7 +108,10 @@ fun VpnSection(vm: GitHubViewModel, openUrl: (String) -> Unit) {
             Column(Modifier.fillMaxWidth().padding(4.dp)) {
                 Text("$icon ${last.status.uppercase()} · ${last.profileName} (${last.type})", color = color, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
                 Text(last.message, style = MaterialTheme.typography.bodySmall)
-                if (last.ipBefore.isNotBlank() || last.ipAfter.isNotBlank()) Text("IP ${last.ipBefore.ifBlank { "?" }} → ${last.ipAfter.ifBlank { "?" }}${if (last.geo.isNotBlank()) "  (${last.geo})" else ""}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                if (last.ipBefore != null || last.ipAfter != null) {
+                    val place = last.ipAfter?.place?.takeIf { it.isNotBlank() } ?: last.ipBefore?.place?.takeIf { it.isNotBlank() }
+                    Text("IP ${last.ipBefore?.ip ?: "?"} → ${last.ipAfter?.ip ?: "?"}${if (place != null) "  ($place)" else ""}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                }
                 val meta = listOfNotNull(last.zedgeOk?.let { if (it) "zedge.net reachable" else "zedge.net NOT reachable" }, if (last.durationMs > 0) "${last.durationMs / 1000}s" else null, if (last.at > 0) android.text.format.DateUtils.getRelativeTimeSpanString(last.at).toString() else null)
                 if (meta.isNotEmpty()) Text(meta.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (last.runUrl.isNotBlank()) TextButton(onClick = { openUrl(last.runUrl) }) { Text("Open run") }
