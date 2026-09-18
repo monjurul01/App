@@ -1,20 +1,44 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Content Studio — Native Android (Kotlin + Jetpack Compose)
 
-# Run and deploy your AI Studio app
+Fully native port of the Zedge automation dashboard. **No WebView, no HTML engine** — every
+feature is re-implemented in Kotlin.
 
-This contains everything you need to run your app locally.
+| Layer | Files |
+|---|---|
+| Core constants, real-time clock, type cycle | `core/Core.kt` |
+| Firebase RTDB REST client (4 accounts, server-time sync) | `data/FirebaseRtdb.kt` |
+| Queue / upload state models | `data/Models.kt` |
+| Media (EXIF-safe image read, video frame grab, JPEG thumbs) | `data/Media.kt` |
+| Upload, sets, video, distribution, pins, copy-to-accounts, R2 gateway | `data/QueueRepository.kt` |
+| GitHub Actions control (dispatch, runs, clean, repo browser, Gemini session cloud-sync) | `data/GitHubRepo.kt` |
+| Publishing Layout Planner (type cycle, min-stock-3 rule, pinned overrides, overdue → today) | `domain/SchedulePlanner.kt` |
+| Special days (Google Calendar IN/BD + Nager 36 countries, cached) | `domain/SpecialDays.kt` |
+| Smart ZIP/RAR import (any set count, file-count auto-detect 2/4/6, folder=set, videos, ringtones) | `domain/ArchiveClassifier.kt` |
+| Screens: Home, Upload Center, Planner, Pin Manager, Multi-Account Distribution, GitHub Control, Item detail | `ui/screens/*` |
 
-View your app in AI Studio: https://ai.studio/apps/drive/1ZMUNbST4zh2LU6jh-1JNq3feYOlnFRwv
+## Build
 
-## Run Locally
+1. Open this folder in **Android Studio Koala (2024.1) or newer**.
+2. Let Gradle sync (needs internet the first time: AGP 8.5.2, Kotlin 2.0.20, Compose BOM 2024.09).
+3. `Run ▶` on a device / emulator (Android 8.0+, API 26), or **Build → Build Bundle(s)/APK(s) → Build APK(s)**.
+4. Release: **Build → Generate Signed Bundle / APK**.
 
-**Prerequisites:**  Node.js
+Command line: `./gradlew assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`
+(the wrapper jar is downloaded by Android Studio on first sync; if you build purely from CLI run `gradle wrapper` once).
+
+## Notes
+
+* Firebase / R2 / Google Calendar keys are the same ones the dashboard uses (see `core/Core.kt`,
+  `domain/SpecialDays.kt`). Move them to `local.properties` + `BuildConfig` if you publish the APK.
+* Share images / ZIPs / videos from any app → "Import to Content Studio" drops them into the Upload Center.
+* The project was authored without an Android SDK on the authoring machine; if the first Gradle
+  build reports a compile error, send the error text/screenshot and it will be fixed.
 
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## v23
+
+- **Metadata guard**: queued files without title / tags / category are never uploaded (bot skips them).
+- **Missing-metadata alerts**: Home card + stat tile, detail-sheet warning, system notification channel *Metadata alerts* (Android 13+ asks for permission).
+- **Exact upload time per slot**: Planner → Upload schedule → toggle **Exact** on a slot and pick the minute. Saved to `dashboardSettings/schedule.slots`.
+
+See `../V23-CHANGES.md` for the full description and Firebase schema.
