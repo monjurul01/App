@@ -2,21 +2,12 @@ name: Build Release APK
 
 # Builds a signed release APK of Content Studio (Kotlin + Jetpack Compose).
 #
-# Triggers:
-#   - Manually from the Actions tab (workflow_dispatch)
-#   - On every push of a version tag, e.g. `git tag v2.0.0 && git push --tags`
-#     -> also publishes a GitHub Release with the APK attached
+# v2: auto-detects where the Android project lives inside the repo, so the build
+# no longer fails with "task 'assembleRelease' not found in project ':app'"
+# when the project sits in a sub-folder (e.g. app/ from the template zip).
 #
-# Required repository secrets (Settings -> Secrets and variables -> Actions):
-#   KEYSTORE_BASE64    base64 of your .jks/.keystore file  (base64 -w0 release.jks)
-#   KEYSTORE_PASSWORD  keystore password
-#   KEY_ALIAS          key alias inside the keystore
-#   KEY_PASSWORD       key password
-#
-# If the secrets are NOT set, a throwaway keystore is generated so the APK is
-# still installable for testing -- but every build will be signed with a
-# different key, so users won't be able to update in place. Add real secrets
-# before distributing.
+# Required repository secrets (optional - a throwaway key is generated if absent):
+#   KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
 
 on:
   workflow_dispatch:
@@ -25,12 +16,9 @@ on:
       - "v*"
 
 permissions:
-  contents: write   # needed to create the GitHub Release on tag pushes
+  contents: write
 
 env:
-  # Change this if the Android project lives in a sub-folder of the repo
-  # (e.g. "ContentStudioNative"). Use "." when build.gradle.kts is at the root.
-  PROJECT_DIR: .
   GRADLE_VERSION: "8.9"
 
 jobs:
@@ -42,6 +30,37 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Locate the Android project
+        id: locate
+        run: |
+          set -euo pipefail
+          # Find every settings.gradle(.kts) and pick the one whose :app module
+          # actually has a build file with the Android application plugin.
+          BEST=""
+          while IFS= read -r s; do
+            d=$(dirname "$s")
+            if [ -f "$d/app/build.gradle.kts" ] || [ -f "$d/app/build.gradle" ]; then
+              BEST="$d"; break
+            fi
+            [ -z "$BEST" ] && BEST="$d"
+          done < <(find . -maxdepth 3 -name 'settings.gradle*' -not -path '*/build/*' | sort)
+
+          if [ -z "$BEST" ]; then
+            echo "::error::No settings.gradle(.kts) found in the repository. Upload the Android project (settings.gradle.kts, build.gradle.kts, app/) to the repo."
+            find . -maxdepth 3 -type d -not -path '*/.git*' | sed 's|^|  |'
+            exit 1
+          fi
+
+          echo "Android project root: $BEST"
+          echo "dir=$BEST" >> "$GITHUB_OUTPUT"
+
+          if [ ! -f "$BEST/app/build.gradle.kts" ] && [ ! -f "$BEST/app/build.gradle" ]; then
+            echo "::error::'$BEST/app/build.gradle.kts' is missing - that is exactly why Gradle reports 'assembleRelease not found in project :app'. The :app module was included in settings.gradle.kts but its build file was never uploaded."
+            echo "Contents of $BEST:"; ls -la "$BEST"
+            echo "Contents of $BEST/app (if any):"; ls -la "$BEST/app" || true
+            exit 1
+          fi
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -58,8 +77,6 @@ jobs:
             build-tools;35.0.0
 
       - name: Set up Gradle ${{ env.GRADLE_VERSION }}
-        # The repo ships without gradlew / gradle-wrapper.jar, so we install
-        # Gradle directly. Also enables dependency + build caching.
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
@@ -67,7 +84,7 @@ jobs:
 
       - name: Prepare signing keystore
         id: keystore
-        working-directory: ${{ env.PROJECT_DIR }}
+        working-directory: ${{ steps.locate.outputs.dir }}
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -76,8 +93,7 @@ jobs:
         run: |
           set -euo pipefail
           KS_PATH="$RUNNER_TEMP/release.keystore"
-
-          if [ -n "${KEYSTORE_BASE64}" ]; then
+          if [ -n "${KEYSTORE_BASE64:-}" ]; then
             echo "Using keystore from repository secrets."
             echo "${KEYSTORE_BASE64}" | base64 --decode > "$KS_PATH"
             echo "KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}" >> "$GITHUB_ENV"
@@ -85,7 +101,7 @@ jobs:
             echo "KEY_PASSWORD=${KEY_PASSWORD}"           >> "$GITHUB_ENV"
             echo "signed_with=secrets" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::No KEYSTORE_BASE64 secret found - generating a throwaway keystore. Add signing secrets before distributing this APK."
+            echo "::warning::No KEYSTORE_BASE64 secret found - generating a throwaway keystore."
             keytool -genkeypair -v \
               -keystore "$KS_PATH" -storetype PKCS12 \
               -alias contentstudio -keyalg RSA -keysize 2048 -validity 10000 \
@@ -96,11 +112,15 @@ jobs:
             echo "KEY_PASSWORD=tempstorepass"      >> "$GITHUB_ENV"
             echo "signed_with=throwaway" >> "$GITHUB_OUTPUT"
           fi
-
           echo "KEYSTORE_PATH=$KS_PATH" >> "$GITHUB_ENV"
 
+      - name: Show Gradle projects and tasks (diagnostics)
+        working-directory: ${{ steps.locate.outputs.dir }}
+        continue-on-error: true
+        run: gradle --no-daemon projects
+
       - name: Build release APK
-        working-directory: ${{ env.PROJECT_DIR }}
+        working-directory: ${{ steps.locate.outputs.dir }}
         run: |
           set -euo pipefail
           if [ -x ./gradlew ]; then
@@ -111,7 +131,7 @@ jobs:
 
       - name: Collect APK
         id: apk
-        working-directory: ${{ env.PROJECT_DIR }}
+        working-directory: ${{ steps.locate.outputs.dir }}
         run: |
           set -euo pipefail
           APK=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
@@ -119,17 +139,11 @@ jobs:
             echo "::error::No APK found under app/build/outputs/apk/release"
             exit 1
           fi
-
-          # Pull versionName from app/build.gradle.kts, fall back to the tag / run number
           VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts || true)
-          if [ -z "$VERSION" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          fi
-
+          [ -z "$VERSION" ] && VERSION="${GITHUB_REF_NAME#v}"
           OUT_NAME="ContentStudio-v${VERSION}-release.apk"
           mkdir -p "$RUNNER_TEMP/dist"
           cp "$APK" "$RUNNER_TEMP/dist/$OUT_NAME"
-
           echo "Built: $OUT_NAME ($(du -h "$APK" | cut -f1))"
           echo "path=$RUNNER_TEMP/dist/$OUT_NAME" >> "$GITHUB_OUTPUT"
           echo "name=$OUT_NAME" >> "$GITHUB_OUTPUT"
