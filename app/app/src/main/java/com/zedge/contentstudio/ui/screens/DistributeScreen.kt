@@ -60,7 +60,7 @@ fun DistributeScreen(vm: MainViewModel) {
     LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         // Round robin visual
         item {
-            SectionCard("Round-robin", "Each file goes to the next account in turn: ZEDGE1 → ZEDGE2 → ZEDGE3 → ZEDGE4.") {
+            SectionCard("Round-robin", "Each file goes to the next account in turn: ZEDGE1 → ZEDGE2 → ZEDGE3.") {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                     Accounts.distOrder.forEachIndexed { i, key ->
                         val next = i == pointer
