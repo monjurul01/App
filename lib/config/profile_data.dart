@@ -14,11 +14,11 @@ const List<BuildProfile> kProfiles = [
 ];
 
 // ---------------------------------------------------------------------------
-// template (tamplate-vpn.zip) - 3 accounts (live Firebase config)
+// zedge live config - 3 accounts
 // ---------------------------------------------------------------------------
 const BuildProfile kProfileTemplate = BuildProfile(
   id: 'template',
-  title: 'Template (fill your own Firebase config)',
+  title: 'Zedge (3 accounts)',
   r2WorkerUrl: 'https://zedgemedia.monjurulgd2001.workers.dev',
   googleCalendarApiKey: '',
   defaultUploadWindows: {
