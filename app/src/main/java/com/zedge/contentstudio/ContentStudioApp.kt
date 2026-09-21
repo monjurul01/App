@@ -34,6 +34,15 @@ class ContentStudioApp : Application() {
         vpn = VpnRepo({ key -> queueRepo.db(key) }, gitHub)
         specialDays = SpecialDays(this, queueRepo.http)
         MetaNotifier.ensureChannel(this)
+        MetaNotifier.ensureSlotChannel(this)
+        // v27.11 missed-slot recovery: gate / bot alerts -> system notification + in-app snackbar
+        appScope.launch {
+            queueRepo.alerts.collect { a ->
+                val label = com.zedge.contentstudio.core.Accounts.byKey(a.accountKey).label
+                MetaNotifier.postSlotAlert(this@ContentStudioApp, a.accountKey, a.id, a.kind, a.text)
+                slotAlertEvents.tryEmit(Pair(a.kind, "$label: ${a.text}"))
+            }
+        }
         // v23 metadata guard: watch the active account's queue and notify about NEW files without metadata.
         appScope.launch {
             combine(queueRepo.activeKey, queueRepo.queue, queueRepo.connected) { key, q, ok -> Triple(key, q, ok) }
@@ -49,6 +58,8 @@ class ContentStudioApp : Application() {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     /** Number of newly detected files without metadata (for an in-app snackbar). */
     val metaEvents = MutableSharedFlow<Int>(extraBufferCapacity = 8)
+    /** v27.11: (kind, text) of a new missed-slot / recovery alert (for an in-app snackbar). */
+    val slotAlertEvents = MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 16)
 
     companion object {
         lateinit var instance: ContentStudioApp

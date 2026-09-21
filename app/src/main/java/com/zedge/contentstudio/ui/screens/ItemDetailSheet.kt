@@ -1,5 +1,7 @@
 package com.zedge.contentstudio.ui.screens
 
+import com.zedge.contentstudio.ui.components.AuroraBackground
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -151,6 +153,7 @@ import com.zedge.contentstudio.ui.theme.Ok
 import com.zedge.contentstudio.ui.theme.Warn
 import com.zedge.contentstudio.ui.theme.typeColor
 import kotlinx.coroutines.delay
+import com.zedge.contentstudio.ui.theme.mixColor
 
 // ------------------------------------------------------------------------------------------------
 // Device frames (same presets as the web studio's "device chooser")
@@ -249,8 +252,10 @@ fun ItemDetailSheet(vm: MainViewModel, item: QueueItem, onDismiss: () -> Unit) {
     val statusColor = when (item.status) { "uploaded" -> Ok; "processing" -> BrandAmber; "failed", "error" -> MaterialTheme.colorScheme.error; else -> MaterialTheme.colorScheme.primary }
     val statusIcon = when (item.status) { "uploaded" -> Icons.Default.CheckCircle; "processing" -> Icons.Default.Sync; "failed", "error" -> Icons.Default.Warning; else -> Icons.Default.Schedule }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = MaterialTheme.colorScheme.surface) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 40.dp)) {
+    // v27: asset details is a full page (was a bottom sheet). Back gesture / Close returns to the list.
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+      AuroraBackground {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().navigationBarsPadding().padding(horizontal = 16.dp).padding(top = 10.dp, bottom = 40.dp)) {
 
             // ---------------- Header
             Row(verticalAlignment = Alignment.Top) {
@@ -400,7 +405,7 @@ fun ItemDetailSheet(vm: MainViewModel, item: QueueItem, onDismiss: () -> Unit) {
                     }
                 }
                 tagList.forEachIndexed { i, t ->
-                    val tc = listOf(BrandYellow, BrandAmber, Color(0xFFFFD54F), Color(0xFFFF8A00), Color(0xFFE6B800))[i % 5]
+                    val tc = listOf(BrandYellow, BrandAmber, mixColor(BrandYellow, BrandAmber, 0.5f), mixColor(BrandYellow, Color.White, 0.3f), mixColor(BrandAmber, Color.Black, 0.2f))[i % 5]
                     Box(Modifier.clip(CircleShape).background(tc.copy(alpha = 0.14f)).border(1.dp, tc.copy(alpha = 0.6f), CircleShape).padding(horizontal = 10.dp, vertical = 5.dp)) {
                         Text("#$t", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     }
@@ -480,6 +485,7 @@ fun ItemDetailSheet(vm: MainViewModel, item: QueueItem, onDismiss: () -> Unit) {
                 TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Close") }
             }
         }
+      }
     }
 
     if (showDate) DateKeyPicker(initialKey = scheduled.ifBlank { null }, onDismiss = { showDate = false }) { scheduled = it; showDate = false }
@@ -548,8 +554,8 @@ private fun PhoneMockup(item: QueueItem, url: String, slot: String?, frame: Devi
     val outer = RoundedCornerShape((frame.screenCorner + 8).dp)
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.fillMaxWidth().clip(outer).background(Brush.linearGradient(listOf(Color(0xFF2A2517), Color(0xFF14110A))))
-                .border(2.dp, Color(0xFF3A3426), outer)
+            Modifier.fillMaxWidth().clip(outer).background(Brush.linearGradient(listOf(Color(0xFF232634), Color(0xFF0B0D14))))
+                .border(2.dp, Color(0xFF343848), outer)
                 .padding(start = frame.bezelH.dp, end = frame.bezelH.dp, top = frame.bezelTop.dp, bottom = frame.bezelBottom.dp)
         ) {
             Box(Modifier.fillMaxWidth().aspectRatio(frame.ratio).clip(RoundedCornerShape(frame.screenCorner.dp)).background(c.copy(alpha = 0.55f)).clickable(onClick = onTap)) {
@@ -593,8 +599,8 @@ private fun PhoneMockup(item: QueueItem, url: String, slot: String?, frame: Devi
                 }
                 if (!item.isMp3 && !item.isVideoType && url.isNotBlank()) Icon(Icons.Default.Fullscreen, "Zoom", Modifier.align(Alignment.BottomEnd).padding(8.dp).size(16.dp), tint = Color.White.copy(alpha = 0.8f))
             }
-            if (frame.homeButton) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 5.dp).size(24.dp).clip(CircleShape).background(Color(0xFF14110A)).border(2.dp, Color(0xFF3F3828), CircleShape))
-            else if (frame.notch != Notch.NONE || frame == DeviceFrame.AND_FLAT) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 2.dp).width(56.dp).height(3.dp).clip(CircleShape).background(Color(0xFF4A4433)))
+            if (frame.homeButton) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 5.dp).size(24.dp).clip(CircleShape).background(Color(0xFF0B0D14)).border(2.dp, Color(0xFF3A3F52), CircleShape))
+            else if (frame.notch != Notch.NONE || frame == DeviceFrame.AND_FLAT) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 2.dp).width(56.dp).height(3.dp).clip(CircleShape).background(Color(0xFF4A5064)))
         }
     }
 }
@@ -603,10 +609,10 @@ private fun PhoneMockup(item: QueueItem, url: String, slot: String?, frame: Devi
 private fun RingtoneScreen(item: QueueItem) {
     val spin = rememberInfiniteTransition(label = "disc")
     val angle by spin.animateFloat(0f, 360f, infiniteRepeatable(tween(7000, easing = LinearEasing), RepeatMode.Restart), label = "angle")
-    Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF2A2517), Color(0xFF0E0C07)))), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+    Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF232634), Color(0xFF0B0D14)))), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Box(Modifier.size(78.dp), contentAlignment = Alignment.Center) {
-            Box(Modifier.fillMaxSize().rotate(angle).clip(CircleShape).background(Brush.sweepGradient(listOf(BrandYellow, Color(0xFFFF8A00), BrandAmber, BrandYellow))))
-            Box(Modifier.size(30.dp).clip(CircleShape).background(Color(0xFF14110A)), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize().rotate(angle).clip(CircleShape).background(Brush.sweepGradient(listOf(BrandYellow, BrandAmber, BrandYellow))))
+            Box(Modifier.size(30.dp).clip(CircleShape).background(Color(0xFF0B0D14)), contentAlignment = Alignment.Center) {
                 Icon(Icons.Default.MusicNote, null, Modifier.size(18.dp), tint = BrandYellow)
             }
         }

@@ -1,5 +1,6 @@
 package com.zedge.contentstudio.ui.screens
 
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -80,8 +81,8 @@ fun PinManagerScreen(vm: MainViewModel) {
     LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatTile("Pinned files", pinned.size.toString(), Modifier.weight(1f), BrandAmber)
-                StatTile("Overdue", overdue.size.toString(), Modifier.weight(1f), if (overdue.isEmpty()) Ok else Warn, hint = if (overdue.isEmpty()) "All on time" else "Shown today")
+                StatTile("Pinned files", pinned.size.toString(), Modifier.weight(1f), BrandAmber, icon = Icons.Default.PushPin) // v27.9 icons
+                StatTile("Overdue", overdue.size.toString(), Modifier.weight(1f), if (overdue.isEmpty()) Ok else Warn, hint = if (overdue.isEmpty()) "All on time" else "Shown today", icon = Icons.Default.Schedule)
             }
         }
         item {

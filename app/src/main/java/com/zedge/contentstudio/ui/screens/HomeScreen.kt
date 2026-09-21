@@ -1,5 +1,10 @@
 package com.zedge.contentstudio.ui.screens
 
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.filled.ErrorOutline
+import com.zedge.contentstudio.ui.components.typeIcon
+import com.zedge.contentstudio.ui.components.DhakaClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -60,6 +65,11 @@ import com.zedge.contentstudio.ui.theme.BrandYellow
 import com.zedge.contentstudio.ui.theme.Ok
 import com.zedge.contentstudio.ui.theme.Warn
 import com.zedge.contentstudio.ui.theme.typeColor
+import com.zedge.contentstudio.ui.theme.BrandHeader
+import com.zedge.contentstudio.ui.theme.BrandHeaderEnd
+import com.zedge.contentstudio.ui.theme.BrandOnHeader
+import com.zedge.contentstudio.ui.theme.BrandBadge
+import com.zedge.contentstudio.ui.theme.BrandOnBadge
 
 @Composable
 fun HomeScreen(vm: MainViewModel, onOpenPage: (Page) -> Unit) {
@@ -77,16 +87,16 @@ fun HomeScreen(vm: MainViewModel, onOpenPage: (Page) -> Unit) {
         // Hero: today at a glance
         item {
             val today = plan.days.firstOrNull()
-            Box(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.large).background(Brush.linearGradient(listOf(BrandYellow, BrandAmber))).padding(horizontal = 16.dp, vertical = 16.dp)) {
+            Box(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.large).background(Brush.linearGradient(listOf(BrandHeader, BrandHeaderEnd, BrandHeader))).padding(horizontal = 16.dp, vertical = 16.dp)) {
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("TODAY", style = MaterialTheme.typography.labelSmall, color = BrandDark.copy(alpha = 0.7f))
+                        Text("TODAY", style = MaterialTheme.typography.labelSmall, color = BrandOnHeader.copy(alpha = 0.7f))
                         Spacer(Modifier.width(6.dp))
-                        Text(RealTime.prettyKey(RealTime.key(RealTime.dhakaDate())), style = MaterialTheme.typography.labelSmall, color = BrandDark.copy(alpha = 0.7f))
+                        Text(RealTime.prettyKey(RealTime.key(RealTime.dhakaDate())), style = MaterialTheme.typography.labelSmall, color = BrandOnHeader.copy(alpha = 0.7f))
                         Spacer(Modifier.weight(1f))
-                        Box(Modifier.size(7.dp).clip(CircleShape).background(if (synced) BrandDark else Color(0xFF7A1E1E)))
+                        Box(Modifier.size(7.dp).clip(CircleShape).background(if (synced) BrandOnHeader else Color(0xFF7A1E1E)))
                         Spacer(Modifier.width(5.dp))
-                        Text(if (synced) "Live time" else "Device time", style = MaterialTheme.typography.labelSmall, color = BrandDark.copy(alpha = 0.7f))
+                        Text(if (synced) "Live time" else "Device time", style = MaterialTheme.typography.labelSmall, color = BrandOnHeader.copy(alpha = 0.7f))
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
@@ -95,15 +105,18 @@ fun HomeScreen(vm: MainViewModel, onOpenPage: (Page) -> Unit) {
                             today.slotCount == 0 -> "All done for today"
                             else -> "${today.slotCount} ${ContentTypes.dayUi(today.dayType).label} left"
                         },
-                        style = MaterialTheme.typography.headlineSmall, color = BrandDark, maxLines = 2, overflow = TextOverflow.Ellipsis
+                        style = MaterialTheme.typography.headlineSmall, color = BrandOnHeader, maxLines = 2, overflow = TextOverflow.Ellipsis
                     )
-                    Text("${Accounts.byKey(active).label} · ${queued.size} queued", style = MaterialTheme.typography.bodyMedium, color = BrandDark.copy(alpha = 0.8f))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("${Accounts.byKey(active).label} · ${queued.size} queued", style = MaterialTheme.typography.bodyMedium, color = BrandOnHeader.copy(alpha = 0.8f), modifier = Modifier.weight(1f))
+                        DhakaClock(color = BrandOnHeader)
+                    }
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { onOpenPage(Page.UPLOAD) }, colors = ButtonDefaults.buttonColors(containerColor = BrandDark, contentColor = BrandYellow), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
+                        Button(onClick = { onOpenPage(Page.UPLOAD) }, colors = ButtonDefaults.buttonColors(containerColor = BrandOnHeader, contentColor = BrandHeader), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
                             Icon(Icons.Default.CloudUpload, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Upload")
                         }
-                        Button(onClick = { onOpenPage(Page.SCHEDULE) }, colors = ButtonDefaults.buttonColors(containerColor = BrandDark.copy(alpha = 0.12f), contentColor = BrandDark), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
+                        Button(onClick = { onOpenPage(Page.SCHEDULE) }, colors = ButtonDefaults.buttonColors(containerColor = BrandOnHeader.copy(alpha = 0.12f), contentColor = BrandOnHeader), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
                             Icon(Icons.Default.CalendarMonth, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Planner")
                         }
                     }
@@ -119,27 +132,27 @@ fun HomeScreen(vm: MainViewModel, onOpenPage: (Page) -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Queue by type", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 2.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatTile("Ringtones", count("AUDIO").toString(), Modifier.weight(1f), typeColor("AUDIO"))
-                    StatTile("Wallpapers", count("WALLPAPER").toString(), Modifier.weight(1f), typeColor("WALLPAPER"))
+                    StatTile("Ringtones", count("AUDIO").toString(), Modifier.weight(1f), typeColor("AUDIO"), icon = typeIcon("AUDIO"))
+                    StatTile("Wallpapers", count("WALLPAPER").toString(), Modifier.weight(1f), typeColor("WALLPAPER"), icon = typeIcon("WALLPAPER"))
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatTile("24H sets", count("WALLPAPER_24H").toString(), Modifier.weight(1f), typeColor("WALLPAPER_24H"))
-                    StatTile("Dual sets", count("WALLPAPER_DUAL").toString(), Modifier.weight(1f), typeColor("WALLPAPER_DUAL"))
+                    StatTile("24H sets", count("WALLPAPER_24H").toString(), Modifier.weight(1f), typeColor("WALLPAPER_24H"), icon = typeIcon("WALLPAPER_24H"))
+                    StatTile("Dual sets", count("WALLPAPER_DUAL").toString(), Modifier.weight(1f), typeColor("WALLPAPER_DUAL"), icon = typeIcon("WALLPAPER_DUAL"))
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatTile("Battery sets", count("WALLPAPER_BATTERY").toString(), Modifier.weight(1f), typeColor("WALLPAPER_BATTERY"))
-                    StatTile("Live wallpapers", count("LIVE_WALLPAPER").toString(), Modifier.weight(1f), typeColor("LIVE_WALLPAPER"))
+                    StatTile("Battery sets", count("WALLPAPER_BATTERY").toString(), Modifier.weight(1f), typeColor("WALLPAPER_BATTERY"), icon = typeIcon("WALLPAPER_BATTERY"))
+                    StatTile("Live wallpapers", count("LIVE_WALLPAPER").toString(), Modifier.weight(1f), typeColor("LIVE_WALLPAPER"), icon = typeIcon("LIVE_WALLPAPER"))
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatTile("Charging animations", count("CHARGING_ANIMATION").toString(), Modifier.weight(1f), typeColor("CHARGING_ANIMATION"))
-                    StatTile("Pinned", queued.count { it.isPinned }.toString(), Modifier.weight(1f), BrandAmber)
+                    StatTile("Charging animations", count("CHARGING_ANIMATION").toString(), Modifier.weight(1f), typeColor("CHARGING_ANIMATION"), icon = typeIcon("CHARGING_ANIMATION"))
+                    StatTile("Pinned", queued.count { it.isPinned }.toString(), Modifier.weight(1f), BrandAmber, icon = Icons.Default.PushPin)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatTile("Failed uploads", failed.size.toString(), Modifier.weight(1f), MaterialTheme.colorScheme.error, hint = if (failed.isNotEmpty()) "Needs attention" else null)
-                    StatTile("No metadata", noMeta.size.toString(), Modifier.weight(1f), Warn, hint = if (noMeta.isNotEmpty()) "Bot skips these" else null)
+                    StatTile("Failed uploads", failed.size.toString(), Modifier.weight(1f), MaterialTheme.colorScheme.error, hint = if (failed.isNotEmpty()) "Needs attention" else null, icon = Icons.Default.ErrorOutline)
+                    StatTile("No metadata", noMeta.size.toString(), Modifier.weight(1f), Warn, hint = if (noMeta.isNotEmpty()) "Bot skips these" else null, icon = Icons.Default.WarningAmber)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatTile("Total in queue", queueItems.size.toString(), Modifier.weight(1f), BrandDark)
+                    StatTile("Total in queue", queueItems.size.toString(), Modifier.weight(1f), BrandDark, icon = Icons.Default.Inventory2) // v27.9 icons
                 }
             }
         }
@@ -161,13 +174,13 @@ fun HomeScreen(vm: MainViewModel, onOpenPage: (Page) -> Unit) {
                         val full = d.slotCount > 0 && filled >= d.slotCount
                         Column(
                             Modifier.width(78.dp).clip(MaterialTheme.shapes.small)
-                                .background(if (d.isToday) BrandYellow else MaterialTheme.colorScheme.surfaceVariant)
+                                .background(if (d.isToday) BrandBadge else MaterialTheme.colorScheme.surfaceVariant)
                                 .clickable { onOpenPage(Page.SCHEDULE) }
                                 .padding(horizontal = 8.dp, vertical = 10.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            val fg = if (d.isToday) BrandDark else MaterialTheme.colorScheme.onSurface
-                            Text(if (d.isToday) "TODAY" else d.date.dayOfWeek.name.take(3), style = MaterialTheme.typography.labelSmall, color = if (d.isToday) BrandDark else MaterialTheme.colorScheme.onSurfaceVariant)
+                            val fg = if (d.isToday) BrandOnBadge else MaterialTheme.colorScheme.onSurface
+                            Text(if (d.isToday) "TODAY" else d.date.dayOfWeek.name.take(3), style = MaterialTheme.typography.labelSmall, color = if (d.isToday) BrandOnBadge else MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(d.date.dayOfMonth.toString(), style = MaterialTheme.typography.titleLarge, color = fg)
                             Spacer(Modifier.height(6.dp))
                             TypeBadge(d.dayType)

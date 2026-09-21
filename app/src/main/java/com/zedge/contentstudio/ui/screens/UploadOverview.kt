@@ -1,5 +1,8 @@
 package com.zedge.contentstudio.ui.screens
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -25,9 +28,13 @@ import com.zedge.contentstudio.domain.RunSchedule
 import com.zedge.contentstudio.domain.SchedulePlan
 import com.zedge.contentstudio.ui.theme.BrandDark
 import com.zedge.contentstudio.ui.theme.BrandYellow
+import com.zedge.contentstudio.ui.theme.Danger
 import com.zedge.contentstudio.ui.theme.Ok
 import com.zedge.contentstudio.ui.theme.Warn
 import kotlinx.coroutines.delay
+import com.zedge.contentstudio.ui.theme.mixColor
+import com.zedge.contentstudio.ui.theme.BrandInk
+import com.zedge.contentstudio.ui.theme.BrandOnInk
 
 /** v14: one reusable, theme-aware upload overview for Home and Planner. */
 @Composable
@@ -49,14 +56,19 @@ internal fun TodayRunStrip(
             Text("Swipe →", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
         }
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val cardWidth = minOf(300.dp, maxWidth - 16.dp)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            val cardWidth = minOf(300.dp, maxWidth - 28.dp)
+            // v27.9 snap: cards snap one-by-one and open on the active account (no half-cut card on the left)
+            val rowState = rememberLazyListState()
+            LaunchedEffect(activeKey) { val i = Accounts.all.indexOfFirst { it.key == activeKey }; if (i >= 0) rowState.animateScrollToItem(i) }
+            LazyRow(state = rowState, flingBehavior = rememberSnapFlingBehavior(lazyListState = rowState), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 itemsIndexed(Accounts.all, key = { _, account -> account.key }) { accountIndex, acc ->
                     val selected = acc.key == activeKey
                     val runs = RunSchedule.todayRuns(acc.key)
                     val g = health[acc.key]
                     val doneWindows = g?.runWindows ?: emptySet()
-                    fun isDone(i: Int): Boolean = doneWindows.contains(i) || (selected && doneWindows.isEmpty() && i < plan.rule.uploadedToday)
+                    val missedWindows = g?.missedWindows ?: emptySet()     // v27.11: failed / never ran -> gate retries
+                    val runningWindows = g?.runningWindows ?: emptySet()
+                    fun isDone(i: Int): Boolean = doneWindows.contains(i) || (selected && doneWindows.isEmpty() && missedWindows.isEmpty() && runningWindows.isEmpty() && i < plan.rule.uploadedToday)
                     val doneCount = runs.indices.count { isDone(it) }
                     val nextIndex = runs.indices.firstOrNull { !isDone(it) && now <= runs[it].windowEndMs }
                     val next = nextIndex?.let { runs[it] }
@@ -103,16 +115,19 @@ internal fun TodayRunStrip(
                             runs.forEachIndexed { i, r ->
                                 if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outline.copy(alpha = 0.18f)))
                                 val done = isDone(i)
-                                val passed = !done && now > r.windowEndMs
-                                val due = !done && !passed && now >= r.startMs
-                                val tag = when { done -> "DONE"; passed -> "CLOSED"; due -> "DUE"; i == nextIndex -> "NEXT"; else -> "LATER" }
-                                val tint = when { done -> Ok; due -> Warn; i == nextIndex -> colors.primary; else -> colors.onSurfaceVariant }
+                                val missed = !done && missedWindows.contains(i)
+                                val running = !done && !missed && runningWindows.contains(i)
+                                val passed = !done && !missed && !running && now > r.windowEndMs
+                                val due = (!done && !passed && now >= r.startMs) || missed || running
+                                val tag = when { done -> "DONE"; missed -> "MISSED · RETRY"; running -> "RUNNING"; passed -> "CLOSED"; due -> "DUE"; i == nextIndex -> "NEXT"; else -> "LATER" }
+                                val tint = when { done -> Ok; missed -> Danger; running -> colors.primary; due -> Warn; i == nextIndex -> colors.primary; else -> colors.onSurfaceVariant }
                                 val slotIndex = i - maxOf(doneWindows.size, if (selected) plan.rule.uploadedToday else 0)
                                 val day = plan.days.firstOrNull { it.isToday }
                                 val item = if (selected && slotIndex >= 0) day?.slots?.getOrNull(slotIndex) else null
                                 val profile = if (selected && slotIndex >= 0) day?.runAt(slotIndex)?.profileLabel else null
                                 val detail = when {
                                     done -> "Uploaded" + (g?.runWindowTimes?.get(i)?.let { " $it" } ?: "")
+                                    missed || running -> g?.runLabels?.get(i) ?: (if (missed) "Missed · will retry" else "Run in progress")
                                     item != null -> item.displayTitle + (profile?.let { " · $it" } ?: "")
                                     passed -> "No run recorded in window"
                                     due -> "Awaiting run confirmation"
@@ -120,7 +135,7 @@ internal fun TodayRunStrip(
                                     else -> "Scheduled · Dhaka time"
                                 }
                                 Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(if (done) "✓" else (i + 1).toString().padStart(2, '0'), fontSize = 10.sp, color = if (done) Ok else colors.onSurfaceVariant, modifier = Modifier.width(22.dp))
+                                    Text(if (done) "✓" else if (missed) "!" else (i + 1).toString().padStart(2, '0'), fontSize = 10.sp, color = if (done) Ok else if (missed) Danger else colors.onSurfaceVariant, modifier = Modifier.width(22.dp))
                                     Column(Modifier.weight(1f).padding(end = 6.dp)) {
                                         Text(RunSchedule.clock(r.start), fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Bold, color = if (done) Ok else colors.onSurface)
                                         Text(detail, fontSize = 10.sp, lineHeight = 14.sp, color = colors.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -134,7 +149,7 @@ internal fun TodayRunStrip(
                 }
             }
         }
-        Text("Scheduled times · 0–14 min delay · Catch-up enabled", fontSize = 10.sp, color = colors.onSurfaceVariant)
+        Text("Scheduled times · 0–14 min delay · Catch-up + missed-slot retry enabled", fontSize = 10.sp, color = colors.onSurfaceVariant)
     }
 }
 
@@ -147,11 +162,11 @@ private fun OverviewClock(leftMs: Long, due: Boolean) {
         numbers.forEachIndexed { i, n ->
             Column(
                 Modifier.widthIn(min = 29.dp).clip(RoundedCornerShape(6.dp))
-                    .background(if (due) Color(0xFF765520) else Color(0xFF292C28)).padding(horizontal = 3.dp, vertical = 5.dp),
+                    .background(if (due) mixColor(BrandInk, Warn, 0.45f) else mixColor(BrandInk, BrandYellow, 0.12f)).padding(horizontal = 3.dp, vertical = 5.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(n.toString().padStart(2, '0'), fontFamily = FontFamily.Monospace, fontSize = 16.sp, lineHeight = 19.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFFCEF))
-                Text(labels[i], fontSize = 7.sp, lineHeight = 9.sp, letterSpacing = 0.4.sp, color = Color(0xFFD4D6BB))
+                Text(n.toString().padStart(2, '0'), fontFamily = FontFamily.Monospace, fontSize = 16.sp, lineHeight = 19.sp, fontWeight = FontWeight.Bold, color = BrandOnInk)
+                Text(labels[i], fontSize = 7.sp, lineHeight = 9.sp, letterSpacing = 0.4.sp, color = BrandOnInk.copy(alpha = 0.7f))
             }
         }
     }

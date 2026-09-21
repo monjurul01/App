@@ -1,5 +1,6 @@
 package com.zedge.contentstudio.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -46,8 +47,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.zedge.contentstudio.Page
-import com.zedge.contentstudio.ui.theme.BrandDark
-import com.zedge.contentstudio.ui.theme.BrandYellow
+import com.zedge.contentstudio.ui.theme.BrandOnNavActive
+import com.zedge.contentstudio.ui.theme.BrandNavActive
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.LaunchedEffect
+import com.zedge.contentstudio.ui.theme.BrandNavBg
 
 fun pageIcon(p: Page): ImageVector = when (p) {
     Page.HOME -> Icons.Filled.Dashboard
@@ -68,20 +75,37 @@ fun FloatingNavBar(current: Page, onSelect: (Page) -> Unit, modifier: Modifier =
     Box(modifier.fillMaxWidth().navigationBarsPadding().padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 12.dp)) {
         Surface(
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 3.dp,
-            shadowElevation = 10.dp,
+            color = (BrandNavBg ?: MaterialTheme.colorScheme.surfaceContainerHigh).copy(alpha = 0.82f), // v27.8 "sidebar" element colour
+            border = BorderStroke(1.dp, glassLine()),
+            tonalElevation = 0.dp,
+            shadowElevation = 18.dp,
             modifier = Modifier.fillMaxWidth(),
         ) {
+            // v25: 7 tabs no longer fit on narrow phones (<= 360dp) - the last one (VPN) was clipped
+            // outside the pill and could not be tapped. The row now scrolls horizontally when needed
+            // (still SpaceBetween when everything fits) and auto-scrolls the selected tab into view.
+            val scroll = rememberScrollState()
+            LaunchedEffect(current) {
+                val idx = Page.entries.indexOf(current)
+                if (scroll.maxValue > 0 && idx >= 0) {
+                    val target = if (idx >= Page.entries.size / 2) scroll.maxValue else 0
+                    scroll.animateScrollTo(target)
+                }
+            }
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val minW = maxWidth
             Row(
-                Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+                Modifier
+                    .horizontalScroll(scroll)
+                    .widthIn(min = minW)
+                    .padding(horizontal = 6.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Page.entries.forEach { p ->
                     val selected = p == current
-                    val bg by animateColorAsState(if (selected) BrandYellow else Color.Transparent, tween(280), label = "bg")
-                    val tint by animateColorAsState(if (selected) BrandDark else MaterialTheme.colorScheme.onSurfaceVariant, tween(280), label = "tint")
+                    val bg by animateColorAsState(if (selected) BrandNavActive else Color.Transparent, tween(280), label = "bg")
+                    val tint by animateColorAsState(if (selected) BrandOnNavActive else MaterialTheme.colorScheme.onSurfaceVariant, tween(280), label = "tint")
                     val scale by animateFloatAsState(if (selected) 1.08f else 0.92f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow), label = "scale")
                     Row(
                         Modifier
@@ -89,12 +113,12 @@ fun FloatingNavBar(current: Page, onSelect: (Page) -> Unit, modifier: Modifier =
                             .background(bg)
                             .clickable { onSelect(p) }
                             .animateContentSize(spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow))
-                            .padding(horizontal = if (selected) 14.dp else 9.dp, vertical = 10.dp),
+                            .padding(horizontal = if (selected) 12.dp else 8.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
                             pageIcon(p), contentDescription = p.short,
-                            modifier = Modifier.size(22.dp).graphicsLayer { scaleX = scale; scaleY = scale },
+                            modifier = Modifier.size(21.dp).graphicsLayer { scaleX = scale; scaleY = scale },
                             tint = tint,
                         )
                         AnimatedVisibility(
@@ -104,11 +128,12 @@ fun FloatingNavBar(current: Page, onSelect: (Page) -> Unit, modifier: Modifier =
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Spacer(Modifier.width(7.dp))
-                                Text(p.short, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = BrandDark, maxLines = 1, softWrap = false)
+                                Text(p.short, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = BrandOnNavActive, maxLines = 1, softWrap = false)
                             }
                         }
                     }
                 }
+            }
             }
         }
     }

@@ -1,5 +1,11 @@
 package com.zedge.contentstudio
 
+import com.zedge.contentstudio.ui.theme.BrandAmber
+import com.zedge.contentstudio.ui.components.AuroraBackground
+import com.zedge.contentstudio.ui.components.BrandLogo
+import androidx.compose.animation.scaleIn
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -84,6 +90,14 @@ import com.zedge.contentstudio.ui.theme.ContentStudioTheme
 import com.zedge.contentstudio.ui.theme.Ok
 import com.zedge.contentstudio.ui.theme.Warn
 import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material3.IconButton
+import com.zedge.contentstudio.ui.screens.ThemeSheet
+import com.zedge.contentstudio.ui.theme.BrandHeader
+import com.zedge.contentstudio.ui.theme.BrandHeaderEnd
+import com.zedge.contentstudio.ui.theme.BrandOnHeader
+import com.zedge.contentstudio.ui.theme.BrandNavActive
+import com.zedge.contentstudio.ui.theme.BrandOnNavActive
 
 enum class Page(val title: String, val short: String) {
     HOME("Dashboard", "Home"), UPLOAD("Upload", "Upload"), SCHEDULE("Planner", "Plan"),
@@ -105,7 +119,13 @@ class MainActivity : ComponentActivity() {
         if (android.os.Build.VERSION.SDK_INT >= 33 && !MetaNotifier.canPost(this)) {
             notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
-        setContent { ContentStudioTheme { AppRoot(vm, ghVm) } }
+        setContent {
+            // v26: theme follows the active account (Firebase dashboardSettings/theme) + live preview from Theme Studio
+            val themeKey by vm.activeKey.collectAsStateWithLifecycle()
+            val themes by vm.theme.collectAsStateWithLifecycle()
+            val themePreview by vm.themePreview.collectAsStateWithLifecycle()
+            ContentStudioTheme(themePreview ?: themes[themeKey]) { AppRoot(vm, ghVm) }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -130,6 +150,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppRoot(vm: MainViewModel, ghVm: GitHubViewModel) {
     var page by rememberSaveable { mutableStateOf(Page.HOME) }
+    var showTheme by rememberSaveable { mutableStateOf(false) }
     val snack = remember { SnackbarHostState() }
     val activeKey by vm.activeKey.collectAsStateWithLifecycle()
     val connected by vm.connected.collectAsStateWithLifecycle()
@@ -144,35 +165,40 @@ fun AppRoot(vm: MainViewModel, ghVm: GitHubViewModel) {
     LaunchedEffect(shared) { if (shared.isNotEmpty()) page = Page.UPLOAD }
 
     BackHandler(enabled = page != Page.HOME) { page = Page.HOME }
+    if (showTheme) ThemeSheet(vm, activeKey) { showTheme = false }
 
+    // v27 Glass UI: animated aurora backdrop behind the whole app
+    AuroraBackground {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Column {
                         Text(page.title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("Content Studio", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Meta Hawladar · Glass", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
                 navigationIcon = {
-                    Box(Modifier.padding(start = 14.dp, end = 4.dp).size(32.dp).clip(CircleShape).background(BrandYellow), contentAlignment = Alignment.Center) {
-                        Text("CS", color = BrandDark, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.labelMedium)
-                    }
+                    // v27.10 brand logo - re-colours live with the Theme Studio (surface / text / primary)
+                    BrandLogo(size = 34.dp, modifier = Modifier.padding(start = 14.dp, end = 4.dp))
                 },
-                actions = { AccountSwitcher(activeKey, connected) { vm.switchAccount(it) } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                actions = {
+                    IconButton(onClick = { showTheme = true }) { Icon(Icons.Default.Palette, contentDescription = "Theme Studio", tint = MaterialTheme.colorScheme.onSurface) }
+                    AccountSwitcher(activeKey, connected) { vm.switchAccount(it) }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
             )
         },
         bottomBar = { FloatingNavBar(current = page, onSelect = { page = it }) },
         snackbarHost = { SnackbarHost(snack) },
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
     ) { pad ->
         Box(Modifier.fillMaxSize().padding(pad)) {
             AnimatedContent(
                 targetState = page,
                 transitionSpec = {
                     val forward = targetState.ordinal >= initialState.ordinal
-                    (slideInHorizontally(tween(260)) { if (forward) it / 5 else -it / 5 } + fadeIn(tween(260))) togetherWith
+                    (slideInHorizontally(tween(260)) { if (forward) it / 5 else -it / 5 } + fadeIn(tween(260)) + scaleIn(tween(260), initialScale = 0.96f)) togetherWith
                         (slideOutHorizontally(tween(200)) { if (forward) -it / 5 else it / 5 } + fadeOut(tween(200)))
                 },
                 label = "page",
@@ -189,6 +215,7 @@ fun AppRoot(vm: MainViewModel, ghVm: GitHubViewModel) {
             }
             ProgressCard(progress, Modifier.align(Alignment.BottomCenter).padding(12.dp))
         }
+    }
     }
 
     RequestDialog(dialog)
@@ -236,8 +263,8 @@ fun ChipRow(options: List<Pair<String, String>>, selected: String, onSelect: (St
                 label = { Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1) },
                 shape = CircleShape,
                 colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = BrandYellow,
-                    selectedLabelColor = BrandDark,
+                    selectedContainerColor = BrandNavActive,
+                    selectedLabelColor = BrandOnNavActive,
                 ),
             )
         }

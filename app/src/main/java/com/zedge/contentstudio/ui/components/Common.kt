@@ -1,5 +1,7 @@
 package com.zedge.contentstudio.ui.components
 
+import com.zedge.contentstudio.ui.theme.onColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -57,6 +59,10 @@ import com.zedge.contentstudio.ui.theme.BrandDark
 import com.zedge.contentstudio.ui.theme.BrandYellow
 import com.zedge.contentstudio.ui.theme.Ok
 import com.zedge.contentstudio.ui.theme.typeColor
+import com.zedge.contentstudio.ui.theme.BrandBadge
+import com.zedge.contentstudio.ui.theme.BrandOnBadge
+import com.zedge.contentstudio.ui.theme.BrandButton
+import com.zedge.contentstudio.ui.theme.BrandOnButton
 
 /** Section card with an optional title row. */
 @Composable
@@ -70,8 +76,8 @@ fun SectionCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = glassSurface()),
+        border = BorderStroke(1.dp, glassLine()),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 14.dp)) {
@@ -98,19 +104,22 @@ fun SectionCard(
 
 /** KPI tile. Designed for 2 per row: big number on top, full label (never truncated) below. */
 @Composable
-fun StatTile(label: String, value: String, modifier: Modifier = Modifier, accent: Color = MaterialTheme.colorScheme.primary, hint: String? = null) {
+fun StatTile(label: String, value: String, modifier: Modifier = Modifier, accent: Color = MaterialTheme.colorScheme.primary, hint: String? = null, icon: ImageVector? = null) { // v27.9 icon
     Card(
         modifier = modifier,
         shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = glassSurface()),
+        border = BorderStroke(1.dp, glassLine()),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(10.dp).clip(CircleShape).background(accent))
+            Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(Brush.linearGradient(listOf(accent, accent.copy(alpha = 0.72f)))), contentAlignment = Alignment.Center) {
+                if (icon != null) Icon(icon, null, Modifier.size(20.dp), tint = onColor(accent))
+                else Box(Modifier.size(10.dp).clip(CircleShape).background(onColor(accent).copy(alpha = 0.9f)))
+            }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(value, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                AnimatedCount(value, MaterialTheme.typography.headlineSmall)
                 Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (hint != null) Text(hint, style = MaterialTheme.typography.labelSmall, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
@@ -153,8 +162,8 @@ fun ItemThumb(item: QueueItem, modifier: Modifier = Modifier, ratio: Float = 9f 
         if (item.isMp3) Icon(Icons.Default.MusicNote, null, tint = Color.White, modifier = Modifier.align(Alignment.Center).size(28.dp))
         if (item.isVideoType) Icon(Icons.Default.PlayCircle, null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.align(Alignment.Center).size(28.dp))
         if (item.isPinned) {
-            Box(Modifier.align(Alignment.TopEnd).padding(5.dp).clip(CircleShape).background(BrandYellow).padding(3.dp)) {
-                Icon(Icons.Default.PushPin, null, tint = BrandDark, modifier = Modifier.size(11.dp))
+            Box(Modifier.align(Alignment.TopEnd).padding(5.dp).clip(CircleShape).background(BrandBadge).padding(3.dp)) {
+                Icon(Icons.Default.PushPin, null, tint = BrandOnBadge, modifier = Modifier.size(11.dp))
             }
         }
         if (item.isSetType) {
@@ -171,8 +180,8 @@ fun QueueCard(item: QueueItem, onClick: () -> Unit, modifier: Modifier = Modifie
     Card(
         modifier = modifier.clickable(onClick = onClick),
         shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = glassSurface()),
+        border = BorderStroke(1.dp, glassLine()),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(Modifier.padding(8.dp)) {
@@ -233,17 +242,17 @@ fun RequestDialog(req: DialogRequest?) {
 @Composable
 fun ProgressCard(p: JobProgress?, modifier: Modifier = Modifier) {
     if (p == null) return
-    Card(modifier = modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, colors = CardDefaults.cardColors(containerColor = BrandYellow)) {
+    Card(modifier = modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, colors = CardDefaults.cardColors(containerColor = BrandButton)) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp, color = BrandDark)
+            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp, color = BrandOnButton)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(p.title, style = MaterialTheme.typography.titleSmall, color = BrandDark)
-                Text(p.detail, style = MaterialTheme.typography.bodySmall, color = BrandDark.copy(alpha = 0.8f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(p.title, style = MaterialTheme.typography.titleSmall, color = BrandOnButton)
+                Text(p.detail, style = MaterialTheme.typography.bodySmall, color = BrandOnButton.copy(alpha = 0.8f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(6.dp))
                 val f = p.fraction
-                if (f != null) LinearProgressIndicator(progress = { f }, modifier = Modifier.fillMaxWidth(), color = BrandDark, trackColor = BrandDark.copy(alpha = 0.2f))
-                else LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = BrandDark, trackColor = BrandDark.copy(alpha = 0.2f))
+                if (f != null) LinearProgressIndicator(progress = { f }, modifier = Modifier.fillMaxWidth(), color = BrandOnButton, trackColor = BrandOnButton.copy(alpha = 0.2f))
+                else LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = BrandOnButton, trackColor = BrandOnButton.copy(alpha = 0.2f))
             }
         }
     }

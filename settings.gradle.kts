@@ -13,5 +13,5 @@ dependencyResolutionManagement {
         maven("https://jitpack.io")
     }
 }
-rootProject.name = "Content Studio"
+rootProject.name = "Meta Hawladar"
 include(":app")

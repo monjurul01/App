@@ -1,5 +1,6 @@
 package com.zedge.contentstudio.ui.screens
 
+import androidx.compose.material.icons.filled.HourglassBottom
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -126,14 +127,26 @@ import com.zedge.contentstudio.ui.theme.typeColor
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneOffset
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Switch
+import com.zedge.contentstudio.data.VarietyConfig
+import com.zedge.contentstudio.ui.theme.ThemeState
+import com.zedge.contentstudio.ui.theme.mixColor
 
-// Planner card palette (light cards on the dark canvas, like the reference design)
-private val PlannerCard = Color(0xFFFFFDF6)
-private val PlannerCream = Color(0xFFFFF3C4)
-private val PlannerMuted = Color(0xFF8A7B55)
-private val PlannerOk = Color(0xFF1F8A4C)
-private val PlannerWarn = Color(0xFF9A6B00)
-private val PlannerInfo = Color(0xFF0B7FB5)
+// v27.8 planner palette follows Theme Studio - readable on light AND dark themes (no more cream-on-dark)
+private val PlannerCard: Color get() = ThemeState.palette.card
+private val PlannerCream: Color get() = mixColor(ThemeState.palette.card, ThemeState.palette.primary, 0.16f)
+private val PlannerMuted: Color get() = ThemeState.palette.muted
+private val PlannerOk: Color get() = if (ThemeState.palette.isDark) Color(0xFF4ADE80) else Color(0xFF1F8A4C)
+private val PlannerWarn: Color get() = if (ThemeState.palette.isDark) Color(0xFFFBBF24) else Color(0xFF9A6B00)
+private val PlannerInfo: Color get() = if (ThemeState.palette.isDark) Color(0xFF7FD4FF) else Color(0xFF0B7FB5)
+private val PlannerSoft: Color get() = mixColor(ThemeState.palette.card, ThemeState.palette.text, 0.07f)
+private val PlannerLine: Color get() = ThemeState.palette.line
+private fun readable(c: Color): Color = if (ThemeState.palette.isDark) mixColor(c, Color.White, 0.45f) else c
+private fun softOf(c: Color): Color = mixColor(ThemeState.palette.card, c, if (ThemeState.palette.isDark) 0.22f else 0.14f)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -156,8 +169,8 @@ fun ScheduleScreen(vm: MainViewModel) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 8.dp, bottom = 24.dp)) {
         // Today summary
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            StatTile("Left today", "${plan.rule.remaining}", Modifier.weight(1f), BrandAmber, hint = ContentTypes.dayUi(plan.rule.type).label)
-            StatTile("Uploaded today", "${plan.rule.uploadedToday} / ${ContentTypes.DAILY_LIMIT}", Modifier.weight(1f), Ok, hint = if (synced) "Live time" else "Device clock")
+            StatTile("Left today", "${plan.rule.remaining}", Modifier.weight(1f), BrandAmber, hint = ContentTypes.dayUi(plan.rule.type).label, icon = Icons.Default.HourglassBottom) // v27.9 icons
+            StatTile("Uploaded today", "${plan.rule.uploadedToday} / ${ContentTypes.DAILY_LIMIT}", Modifier.weight(1f), Ok, hint = if (synced) "Live time" else "Device clock", icon = Icons.Default.CheckCircle)
         }
         Spacer(Modifier.height(12.dp))
 
@@ -171,6 +184,10 @@ fun ScheduleScreen(vm: MainViewModel) {
 
         // v9: edit upload windows (saved to Firebase, read by the bot) + cron health
         ScheduleSettingsCard(vm, activeKey)
+        Spacer(Modifier.height(12.dp))
+
+        // v25: Mix mode - 3 slots = 3 different content types (dashboardSettings/variety)
+        MixModeCard(vm, activeKey)
         Spacer(Modifier.height(12.dp))
 
         // Stock per type - one horizontal strip of equal-size tiles, all text left-aligned
@@ -338,9 +355,9 @@ fun ScheduleScreen(vm: MainViewModel) {
 // ---------------- v12: professional slot cards (same design as the web panel) ----------------
 private data class SlotTone(val c1: Color, val c2: Color, val soft: Color, val ink: Color)
 private fun slotTone(type: String?): SlotTone = when (if (type == "RINGTONE") "AUDIO" else type) {
-    "AUDIO" -> SlotTone(Color(0xFFFF9F1A), Color(0xFFE05D00), Color(0xFFFFF1E0), Color(0xFFB4520A))
-    "WALLPAPER" -> SlotTone(Color(0xFFFFE14D), Color(0xFFF2B400), Color(0xFFFFF8D6), Color(0xFF8A6A00))
-    else -> SlotTone(Color(0xFFFFCF5C), Color(0xFFC98A00), Color(0xFFFFF3C4), Color(0xFF7A5A00))
+    "AUDIO" -> SlotTone(Color(0xFFFF9F1A), Color(0xFFE05D00), softOf(Color(0xFFFF9F1A)), readable(Color(0xFFB4520A)))
+    "WALLPAPER" -> SlotTone(Color(0xFFFFE14D), Color(0xFFF2B400), softOf(Color(0xFFF2B400)), readable(Color(0xFF8A6A00)))
+    else -> SlotTone(BrandYellow, BrandAmber, softOf(BrandYellow), readable(mixColor(BrandYellow, Color.Black, 0.45f)))
 }
 
 @Composable
@@ -378,10 +395,10 @@ private fun StatusBadge(text: String, icon: ImageVector?, bg: Brush, fg: Color, 
 @Composable
 private fun RunStatusBadge(run: PlannedRun) {
     when {
-        run.passed -> StatusBadge("PASSED", Icons.Default.Check, SolidColor(Color(0xFFEFE6CC)), Color(0xFF8A6D00))
+        run.passed -> StatusBadge("PASSED", Icons.Default.Check, SolidColor(PlannerSoft), PlannerMuted)
         run.live -> StatusBadge("RUNNING", Icons.Default.Bolt, Brush.linearGradient(listOf(Color(0xFFFF9F1A), Color(0xFFE05D00))), Color.White, pulse = true)
         run.isNext -> StatusBadge("NEXT UP", Icons.Default.SkipNext, Brush.linearGradient(listOf(Color(0xFF22C55E), Color(0xFF15803D))), Color.White)
-        else -> StatusBadge("SCHEDULED", null, SolidColor(Color(0xFFF3F0E6)), Color(0xFF8A7B55))
+        else -> StatusBadge("SCHEDULED", null, SolidColor(PlannerSoft), PlannerMuted)
     }
 }
 
@@ -398,9 +415,9 @@ private fun RunMetaRow(run: PlannedRun?) {
     }
     val timeTxt = run.rangeLabel
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (run.passed) MetaPill(Icons.Default.Schedule, timeTxt, Color(0xFFA89E85), Color(0xFFF5F2EA), Color(0xFFEAE4D3), strike = true)
-        else MetaPill(Icons.Default.Schedule, timeTxt, Color(0xFF0B6FA0), Color(0xFFEAF6FC), Color(0xFFD3EBF6))
-        MetaPill(Icons.Default.Person, run.profileLabel, Color(0xFF5C5138), Color(0xFFF7F3E8), Color(0xFFEFE6CC))
+        if (run.passed) MetaPill(Icons.Default.Schedule, timeTxt, PlannerMuted, PlannerSoft, PlannerLine, strike = true)
+        else MetaPill(Icons.Default.Schedule, timeTxt, PlannerInfo, mixColor(PlannerCard, PlannerInfo, 0.14f), PlannerInfo.copy(alpha = 0.35f))
+        MetaPill(Icons.Default.Person, run.profileLabel, ThemeState.palette.text.copy(alpha = 0.85f), PlannerSoft, PlannerLine)
     }
     if (!run.passed && run.startMs > 0L) {
         Spacer(Modifier.height(4.dp))
@@ -420,7 +437,7 @@ private fun cdLook(now: Long, startMs: Long, endMs: Long, windowEndMs: Long): Cd
     }
     now <= endMs -> CdLook("live", "UPLOADING NOW", Icons.Default.Bolt, Color(0xFFFF8A00), Color(0xFFC85C00), Color(0xFFFFF7E6), Color(0xFFC85C00), endMs - now, pulse = true)
     now <= windowEndMs -> CdLook("catch", "CATCH-UP CLOSES IN", Icons.Default.Sync, Color(0xFF6B4A00), Color(0xFF3D2A00), Color(0xFFFFD66B), Color(0xFF8A4B00), windowEndMs - now)
-    else -> CdLook("passed", "WINDOW PASSED", Icons.Default.Schedule, Color(0xFFD9D3C2), Color(0xFFC4BDA9), Color(0xFF6F6650), PlannerMuted, 0L)
+    else -> CdLook("passed", "WINDOW PASSED", Icons.Default.Schedule, PlannerSoft, mixColor(PlannerCard, ThemeState.palette.text, 0.12f), PlannerMuted, PlannerMuted, 0L)
 }
 
 @Composable
@@ -743,4 +760,67 @@ fun DateKeyPicker(initialKey: String?, onDismiss: () -> Unit, onPick: (String) -
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     ) { DatePicker(state = state) }
+}
+
+/** v25 Mix mode: when ON the account's 3 daily slots upload 3 DIFFERENT content types (bot reads dashboardSettings/variety). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MixModeCard(vm: MainViewModel, activeKey: String) {
+    val cfgMap by vm.variety.collectAsStateWithLifecycle()
+    val usedMap by vm.varietyUsed.collectAsStateWithLifecycle()
+    SectionCard(
+        title = "Mix mode — 3 slots, 3 different types",
+        subtitle = "OFF = normal rotation (one content type per day). ON = every daily slot uploads a different content type; order rotates daily, empty types are skipped, pinned items always win. Saved per account in Firebase.",
+    ) {
+        Accounts.all.forEach { acc ->
+            val live = cfgMap[acc.key] ?: VarietyConfig()
+            var draft by remember(acc.key, live) { mutableStateOf(live) }
+            val dirty = draft != live
+            val used = usedMap[acc.key]
+            val usedToday = if (used != null && used.date == RealTime.dhakaTodayString()) used.types else emptyList()
+            val isActive = acc.key == activeKey
+            Column(
+                Modifier.fillMaxWidth().padding(bottom = 10.dp)
+                    .border(1.dp, if (isActive) BrandYellow else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(acc.key.replace("zedge", "ZEDGE ") + (if (isActive) "  · active" else ""), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            if (draft.enabled) "Mix mode ON" else "OFF — normal day-type rotation",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (draft.enabled) Ok else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = draft.enabled, onCheckedChange = { draft = draft.copy(enabled = it) })
+                }
+                if (draft.enabled) {
+                    Text("Content types to mix (min 2; only types with queued files are used)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        VarietyConfig.ALL.forEach { t ->
+                            val on = t in draft.types
+                            FilterChip(
+                                selected = on,
+                                onClick = { draft = draft.copy(types = VarietyConfig.ALL.filter { x -> if (x == t) !on else x in draft.types }) },
+                                label = { Text(VarietyConfig.label(t), style = MaterialTheme.typography.labelSmall) },
+                            )
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { draft = draft.copy(strict = !draft.strict) }) {
+                        Checkbox(checked = draft.strict, onCheckedChange = { draft = draft.copy(strict = it) })
+                        Text("Strict: prefer a different type for every slot (repeats only when no other type has stock - a slot is never left empty)", style = MaterialTheme.typography.bodySmall)
+                    }
+                    val order = VarietyConfig.orderToday(draft.types)
+                    Text("Order today: " + order.joinToString(" › ") { VarietyConfig.label(it) }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Uploaded today: " + (if (usedToday.isEmpty()) "-" else usedToday.joinToString(", ") { VarietyConfig.label(it) }), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { vm.saveVariety(acc.key, draft) }, enabled = dirty) { Text(if (dirty) "Save to Firebase" else "Saved") }
+                    OutlinedButton(onClick = { draft = live }, enabled = dirty) { Text("Reset") }
+                }
+            }
+        }
+    }
 }

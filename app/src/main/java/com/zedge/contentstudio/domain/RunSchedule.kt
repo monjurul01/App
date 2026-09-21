@@ -41,6 +41,9 @@ data class GateHealth(
     // v13 cross-account: which windows really uploaded today + the time they ran
     val runWindows: Set<Int> = emptySet(), val runWindowTimes: Map<Int, String> = emptyMap(),
     val slotsUsed: List<SlotSpec>? = null,   // v23: slots the bot actually evaluated on its last ping
+    // v27.11 missed-slot recovery: windows whose run failed / never happened (gate retries them) and runs in progress,
+    // with a human label ("Missed · will retry in the next window — <reason>") per window
+    val missedWindows: Set<Int> = emptySet(), val runningWindows: Set<Int> = emptySet(), val runLabels: Map<Int, String> = emptyMap(),
 ) {
     val minutesSincePing: Long? get() = lastPing?.let { (System.currentTimeMillis() - it) / 60000 }
 }

@@ -87,6 +87,35 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val slots: StateFlow<Map<String, List<com.zedge.contentstudio.domain.SlotSpec>>> = repo.slots
     val metaAlerts: StateFlow<Map<String, QueueRepository.MetaAlert?>> = repo.metaAlerts
 
+    // v26 theme studio (per account, shared with the web panel)
+    val theme: StateFlow<Map<String, com.zedge.contentstudio.data.ThemeConfig?>> = repo.theme
+    private val _themePreview = MutableStateFlow<com.zedge.contentstudio.data.ThemeConfig?>(null)
+    val themePreview: StateFlow<com.zedge.contentstudio.data.ThemeConfig?> = _themePreview
+    fun previewTheme(cfg: com.zedge.contentstudio.data.ThemeConfig?) { _themePreview.value = cfg }
+    fun saveTheme(cfg: com.zedge.contentstudio.data.ThemeConfig, allAccounts: Boolean = false) {
+        val keys = if (allAccounts) Accounts.keys else listOf(activeKey.value)
+        val clean = cfg.sanitized()
+        viewModelScope.launch {
+            val failed = mutableListOf<String>()
+            keys.forEach { k -> runCatching { repo.saveTheme(k, clean) }.onFailure { failed += k } }
+            _themePreview.value = null
+            if (failed.isEmpty()) toast("Theme saved for " + keys.joinToString(", ") { it.replace("zedge", "ZEDGE ") } + " - the web panel uses it too", "ok")
+            else toast("Theme save failed for " + failed.joinToString(", "), "err")
+        }
+    }
+
+    // v25 mix mode
+    val variety: StateFlow<Map<String, com.zedge.contentstudio.data.VarietyConfig>> = repo.variety
+    val varietyUsed: StateFlow<Map<String, com.zedge.contentstudio.data.VarietyUsed?>> = repo.varietyUsed
+    fun saveVariety(key: String, cfg: com.zedge.contentstudio.data.VarietyConfig) {
+        if (cfg.enabled && cfg.types.size < 2) { toast("Mix mode needs at least 2 content types", "error"); return }
+        viewModelScope.launch {
+            runCatching { repo.saveVariety(key, cfg) }
+                .onSuccess { toast("${key.replace("zedge", "ZEDGE ")}: Mix mode ${if (cfg.enabled) "ON" else "OFF"} saved - bot uses it from the next run", "ok") }
+                .onFailure { toast("Save failed: ${it.message}", "error") }
+        }
+    }
+
     fun saveSchedule(key: String, slots: List<com.zedge.contentstudio.domain.SlotSpec>) {
         val err = RunSchedule.validateSlots(slots)
         if (err != null) { toast(err, "error"); return }
@@ -125,6 +154,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             (app as com.zedge.contentstudio.ContentStudioApp).metaEvents.collect { n ->
                 toast("$n new file(s) without metadata - upload bot will skip them until fixed", "error")
+            }
+        }
+        // v27.11: missed-slot recovery alerts from the workflow gate / bot
+        viewModelScope.launch {
+            (app as com.zedge.contentstudio.ContentStudioApp).slotAlertEvents.collect { (kind, text) ->
+                toast(text, when (kind) { "ok" -> "ok"; "err" -> "error"; else -> "info" })
             }
         }
     }

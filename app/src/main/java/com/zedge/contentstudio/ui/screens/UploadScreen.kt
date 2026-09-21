@@ -149,7 +149,7 @@ fun UploadScreen(vm: MainViewModel) {
     val slotUris = remember { mutableStateMapOf<String, Uri>() }
     var pendingSlot by remember { mutableStateOf<String?>(null) }
 
-    // Files shared from another app ("Import to Content Studio") land here.
+    // Files shared from another app ("Import to Meta Hawladar") land here.
     LaunchedEffect(shared) {
         if (shared.isNotEmpty()) {
             val uris = vm.consumeSharedUris()

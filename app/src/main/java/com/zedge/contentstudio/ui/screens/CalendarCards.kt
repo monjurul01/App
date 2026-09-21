@@ -34,6 +34,10 @@ import com.zedge.contentstudio.ui.theme.BrandYellow
 import com.zedge.contentstudio.ui.theme.Ok
 import com.zedge.contentstudio.ui.theme.Warn
 import kotlinx.coroutines.delay
+import com.zedge.contentstudio.ui.theme.mixColor
+import com.zedge.contentstudio.ui.theme.BrandAmber
+import com.zedge.contentstudio.ui.theme.BrandInk
+import com.zedge.contentstudio.ui.theme.BrandOnInk
 
 /** v15: content-sized calendar cards, accessible contrast and persistent timer units. */
 @Composable
@@ -46,14 +50,15 @@ fun DayCard(d: PlannedDay, specialDays: SpecialDays, modifier: Modifier = Modifi
     val filled = d.slots.count { it != null }
     // v16 raised golden cards
     val dark = colors.surface.luminance() < 0.5f
-    val top = if (dark) (if (d.isToday) Color(0xFF514014) else Color(0xFF352B16)) else (if (d.isToday) Color(0xFFFFE779) else Color(0xFFFFF1B6))
-    val bottom = if (dark) Color(0xFF241F14) else Color(0xFFFFFCED)
-    Column(modifier.shadow(if (d.isToday) 10.dp else 6.dp, shape, clip = false, spotColor = Color(0xFF9A6D00).copy(alpha = 0.45f)).clip(shape)
+    // v27.8 theme-tinted card (primary colour, not fixed gold)
+    val top = mixColor(colors.surface, BrandYellow, if (d.isToday) (if (dark) 0.30f else 0.36f) else (if (dark) 0.14f else 0.18f))
+    val bottom = mixColor(colors.surface, BrandYellow, 0.04f)
+    Column(modifier.shadow(if (d.isToday) 10.dp else 6.dp, shape, clip = false, spotColor = BrandYellow.copy(alpha = 0.45f)).clip(shape)
         .background(Brush.verticalGradient(listOf(top, bottom))).border(1.dp, if (d.isToday) BrandYellow else BrandYellow.copy(alpha = 0.35f), shape)) {
         Box(Modifier.fillMaxWidth().height(3.dp).background(Brush.horizontalGradient(listOf(BrandYellow.copy(alpha = 0.3f), BrandYellow, BrandYellow.copy(alpha = 0.3f)))))
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(43.dp).shadow(3.dp, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(Color(0xFFFFEB76), BrandYellow))), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(43.dp).shadow(3.dp, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(BrandAmber, BrandYellow))), contentAlignment = Alignment.Center) {
                     Text(d.date.dayOfMonth.toString(), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = BrandDark)
                 }
                 Spacer(Modifier.width(10.dp))
@@ -91,7 +96,7 @@ private fun PlannerSlot(index: Int, item: QueueItem?, run: PlannedRun?, hasRuns:
     val tint = when { item == null -> colors.onSurfaceVariant; due -> Warn; next -> Ok; else -> colors.onSurfaceVariant }
     val status = when { item == null -> "EMPTY"; run == null && hasRuns -> "NO RUN"; past -> "CLOSED"; due -> "DUE"; next -> "NEXT"; else -> "PLANNED" }
     val shape = RoundedCornerShape(12.dp)
-    val base = Modifier.fillMaxWidth().shadow(3.dp, shape, clip = false, spotColor = Color(0xFF886300).copy(alpha = 0.3f)).clip(shape).background(Brush.verticalGradient(listOf(colors.surface, if (colors.surface.luminance() < 0.5f) Color(0xFF2D2514) else Color(0xFFFFFEF5))))
+    val base = Modifier.fillMaxWidth().shadow(3.dp, shape, clip = false, spotColor = BrandYellow.copy(alpha = 0.3f)).clip(shape).background(Brush.verticalGradient(listOf(colors.surface, mixColor(colors.surface, BrandYellow, 0.08f))))
         .border(1.dp, if (due || next) tint.copy(alpha = 0.7f) else BrandYellow.copy(alpha = 0.3f), shape)
     val action = if (item == null) base.clickable(onClickLabel = "Choose a file for this day", onClick = onEmpty)
         else base.combinedClickable(onClickLabel = "View file", onLongClickLabel = "Move or unpin file", onClick = { onItem(item) }, onLongClick = { onItemLong(item) })
@@ -136,9 +141,9 @@ private fun PlannerSlotClock(run: PlannedRun, now: Long) {
             val units = listOf("HRS", "MIN", "SEC")
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 values.forEachIndexed { i, value ->
-                    Column(Modifier.widthIn(min = 31.dp).clip(RoundedCornerShape(6.dp)).background(if (due) Color(0xFF765520) else Color(0xFF35290E)).padding(horizontal = 4.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(value.toString().padStart(2, '0'), fontSize = 16.sp, lineHeight = 19.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = Color(0xFFFFE77B))
-                        Text(units[i], fontSize = 8.sp, lineHeight = 10.sp, color = Color(0xFFCCB979))
+                    Column(Modifier.widthIn(min = 31.dp).clip(RoundedCornerShape(6.dp)).background(if (due) mixColor(BrandInk, Warn, 0.45f) else mixColor(BrandInk, BrandYellow, 0.12f)).padding(horizontal = 4.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(value.toString().padStart(2, '0'), fontSize = 16.sp, lineHeight = 19.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = BrandOnInk)
+                        Text(units[i], fontSize = 8.sp, lineHeight = 10.sp, color = BrandOnInk.copy(alpha = 0.7f))
                     }
                 }
             }
