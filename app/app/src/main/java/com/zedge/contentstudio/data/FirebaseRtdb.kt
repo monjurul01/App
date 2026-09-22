@@ -93,8 +93,11 @@ class FirebaseRtdb(private val http: OkHttpClient, val baseUrl: String) {
             } catch (_: Exception) {}
         }
 
+        // v27.10: Firebase sends an SSE keep-alive every ~30 s. A finite read timeout turns a silently dead
+        // socket (Wi-Fi <-> mobile switch, Doze, VPN drop) into an exception so the stream reconnects and
+        // re-syncs a full snapshot instead of showing stale metadata forever (web panel was right, app was not).
         fun streamingClient(base: OkHttpClient): OkHttpClient =
-            base.newBuilder().readTimeout(0, TimeUnit.MILLISECONDS).build()
+            base.newBuilder().readTimeout(90, TimeUnit.SECONDS).build()
     }
 }
 
@@ -166,7 +169,10 @@ class RtdbStream(base: OkHttpClient, private val url: String) {
                 val o = JSONObject(data)
                 val base = segments(o.optString("path", "/"))
                 val d = o.optJSONObject("data")
-                if (d != null) for (k in Json.keys(d)) root = setAt(root, base + k, Json.norm(d.opt(k)))
+                // v27.10: a multi-location update (update(ref(db), {"id/title": ..})) arrives as a patch whose keys
+                // contain slashes -> split them, otherwise a bogus "id/title" child was created and the real
+                // item kept its OLD title/tags (metadata mismatch vs. the web panel).
+                if (d != null) for (k in Json.keys(d)) root = setAt(root, base + segments(k), Json.norm(d.opt(k)))
                 publish()
             }
             "cancel", "auth_revoked" -> throw IOException("stream $event")

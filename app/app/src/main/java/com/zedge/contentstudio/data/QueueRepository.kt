@@ -106,6 +106,30 @@ class QueueRepository(private val context: Context) {
             sch.launchIn(this)
             gate.launchIn(this)
             meta.launchIn(this)
+            // v27.11 missed-slot recovery: alerts written by the workflow gate / bot (slot missed -> retry plan,
+            // slot recovered, gave up). New ids (48 h look-back, remembered in prefs) are emitted to `alerts`.
+            val al = d.stream("dashboardSettings/alerts")
+            al.launchIn(this)
+            launch {
+                al.snapshot.collect { snap ->
+                    if (!snap.ready) return@collect
+                    val o = snap.data as? JSONObject ?: return@collect
+                    val seenKey = "alert_seen_" + key
+                    val seen = prefs.getStringSet(seenKey, emptySet())?.toMutableSet() ?: mutableSetOf()
+                    val now = System.currentTimeMillis()
+                    val fresh = Json.keys(o).mapNotNull { k -> o.optJSONObject(k) }
+                        .filter { a -> a.optString("id").isNotBlank() && a.optString("id") !in seen && now - a.optLong("ts", 0L) < 48 * 3600_000L }
+                        .sortedBy { it.optLong("ts", 0L) }
+                    if (fresh.isEmpty()) return@collect
+                    fresh.forEach { a ->
+                        seen.add(a.optString("id"))
+                        _alerts.tryEmit(SlotAlert(key, a.optString("id"), a.optLong("ts", 0L), a.optString("kind", "warn"), a.optString("text"), a.optString("textBn", a.optString("text")), a.optInt("slot", -1)))
+                    }
+                    // keep the seen-set bounded (ids are date-prefixed, so oldest sort first)
+                    val trimmed = if (seen.size > 200) seen.sorted().takeLast(200).toMutableSet() else seen
+                    prefs.edit().putStringSet(seenKey, trimmed).apply()
+                }
+            }
             // v25 mix mode settings + today's used types
             val vty = d.stream("dashboardSettings/variety")
             val vtyUsed = d.stream("uploadState/varietyUsed")
@@ -160,26 +184,61 @@ class QueueRepository(private val context: Context) {
         }
     }
 
+    /** v27.11: one missed-slot / recovery alert from the gate or bot (dashboardSettings/alerts). */
+    data class SlotAlert(val accountKey: String, val id: String, val ts: Long, val kind: String, val text: String, val textBn: String, val slot: Int)
+    private val _alerts = kotlinx.coroutines.flow.MutableSharedFlow<SlotAlert>(extraBufferCapacity = 32)
+    val alerts: kotlinx.coroutines.flow.SharedFlow<SlotAlert> = _alerts
+
     private fun parseGate(o: JSONObject?): GateHealth? {
         if (o == null) return null
         val today = RealTime.key(RealTime.dhakaDate(0))   // gate writes YYYY-MM-DD
         val runsObj = o.optJSONObject("runs")?.optJSONObject(today)
+        // v27.11 missed-slot recovery: run markers carry the REAL result (status: started | uploaded | failed | idle |
+        // skipped-limit). Legacy markers (no status) = uploaded; "started" older than 70 min = stale = failed (gate rule).
+        fun statusOf(e: JSONObject?): String {
+            if (e == null) return "none"
+            val st = e.optString("status", "")
+            if (st.isBlank() || st == "uploaded" || st == "skipped-limit") return "done"
+            if (st == "started") return if (System.currentTimeMillis() - e.optLong("at", 0L) > 70 * 60000L) "failed" else "running"
+            return "failed"
+        }
+        fun suffixOf(e: JSONObject?): String = when (statusOf(e)) {
+            "done" -> if (e?.optBoolean("retry") == true) " (recovered)" else if (e?.optBoolean("catchUp") == true) " (catch-up)" else ""
+            "running" -> " (running…)"
+            else -> " (" + (if (e?.optString("status") == "idle") "nothing to upload" else "FAILED") + (if ((e?.optInt("attempts") ?: 0) >= 3) " · gave up" else " · retry pending") + ")"
+        }
         val runs = runsObj?.let { r -> Json.keys(r).sortedBy { it.toIntOrNull() ?: 0 }.map { k ->
             val e = r.optJSONObject(k)
-            "W${(k.toIntOrNull() ?: 0) + 1} ${e?.optString("dhaka") ?: ""}" + (if (e?.optBoolean("catchUp") == true) " (catch-up)" else "")
+            "W${(k.toIntOrNull() ?: 0) + 1} ${e?.optString("dhaka") ?: ""}" + suffixOf(e)
         } } ?: emptyList()
         val wu = o.optJSONArray("windowsUsed")?.let { a -> (0 until a.length()).map { a.optInt(it) } }
         val su = SlotSpec.parse(o.optJSONArray("slotsUsed"))
         // v13 cross-account: window index -> real run time, so every account shows true status
         val doneW = mutableSetOf<Int>()
         val doneT = mutableMapOf<Int, String>()
+        val missedW = mutableSetOf<Int>()
+        val runningW = mutableSetOf<Int>()
+        val labels = mutableMapOf<Int, String>()
         runsObj?.let { r ->
             Json.keys(r).forEach { k ->
                 val idx = k.toIntOrNull() ?: return@forEach
-                doneW.add(idx)
                 val e = r.optJSONObject(k)
-                val t = e?.optString("dhaka")?.takeIf { it.isNotBlank() }
-                if (t != null) doneT[idx] = t.trim().substringAfterLast(' ') + (if (e.optBoolean("catchUp")) " (catch-up)" else "")
+                val t = e?.optString("dhaka")?.takeIf { it.isNotBlank() }?.trim()?.substringAfterLast(' ')
+                when (statusOf(e)) {
+                    "done" -> {
+                        doneW.add(idx)
+                        if (t != null) doneT[idx] = t + suffixOf(e)
+                    }
+                    "running" -> { runningW.add(idx); labels[idx] = "Run in progress" + (t?.let { " · started $it" } ?: "") + (if (e?.optBoolean("retry") == true) " (retry)" else "") }
+                    "failed" -> {
+                        missedW.add(idx)
+                        val att = e?.optInt("attempts") ?: 0
+                        val err = e?.optString("error", "") ?: ""
+                        val why = if (err.isNotBlank()) err.take(70) else if (e?.optString("status") == "idle") "nothing to upload" else "run failed"
+                        val plan = if (att >= 3) "Missed · gave up after 3 attempts" else "Missed · will retry " + (if (e?.optString("plan") == "in-window") "in this window" else "in the next window")
+                        labels[idx] = "$plan — $why"
+                    }
+                }
             }
         }
         return GateHealth(
@@ -188,6 +247,7 @@ class QueueRepository(private val context: Context) {
             lastDecision = o.optString("lastDecision").takeIf { it.isNotBlank() },
             lastRunDhaka = o.optString("lastRunDhaka").takeIf { it.isNotBlank() },
             windowsUsed = wu, runsToday = runs, runWindows = doneW, runWindowTimes = doneT, slotsUsed = su,
+            missedWindows = missedW, runningWindows = runningW, runLabels = labels,
         )
     }
 

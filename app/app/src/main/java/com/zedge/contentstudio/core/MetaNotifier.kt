@@ -33,6 +33,37 @@ object MetaNotifier {
         })
     }
 
+    // v27.11 missed-slot recovery: channel for "slot missed -> retry / recovered / gave up" alerts from the bot gate
+    const val SLOT_CHANNEL_ID = "slot_alerts"
+    fun ensureSlotChannel(ctx: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (nm.getNotificationChannel(SLOT_CHANNEL_ID) != null) return
+        nm.createNotificationChannel(NotificationChannel(SLOT_CHANNEL_ID, "Upload slot alerts", NotificationManager.IMPORTANCE_HIGH).apply {
+            description = "A scheduled upload did not happen (workflow / runner issue) and will be retried, or was recovered"
+        })
+    }
+
+    /** Post one missed-slot / recovery alert as a system notification (id derived from the alert id). */
+    fun postSlotAlert(ctx: Context, accountKey: String, alertId: String, kind: String, text: String) {
+        if (!canPost(ctx)) return
+        ensureSlotChannel(ctx)
+        val label = Accounts.byKey(accountKey).label
+        val title = when (kind) { "ok" -> "$label · slot recovered"; "err" -> "$label · upload slot lost"; else -> "$label · upload slot missed" }
+        val intent = Intent(ctx, MainActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP }
+        val pi = PendingIntent.getActivity(ctx, alertId.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val n = NotificationCompat.Builder(ctx, SLOT_CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .build()
+        try { NotificationManagerCompat.from(ctx).notify(("slot:" + alertId).hashCode(), n) } catch (_: SecurityException) {}
+    }
+
     fun canPost(ctx: Context): Boolean =
         Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 

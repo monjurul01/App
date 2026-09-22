@@ -297,6 +297,19 @@ data class ThemeConfig(
             Preset("mint", "Mint", "#22c55e", "#10b981", "#f4fdf7", "#ffffff", "#0f2417"),
             Preset("rose", "Rose", "#ff5c8a", "#ff8fab", "#fff5f8", "#ffffff", "#2b1220"),
             Preset("violet", "Violet", "#a78bfa", "#c084fc", "#0f0a1e", "#1a1230", "#efe9ff"),
+            // v27.12 presets (same list in the web panel + desktop app)
+            Preset("nebula", "Nebula", "#c084fc", "#f472b6", "#0a0614", "#160d26", "#f3e8ff"),
+            Preset("cyber", "Cyberpunk", "#00f0ff", "#ff2bd6", "#050510", "#0d0f22", "#e0fbff"),
+            Preset("royal", "Royal Blue", "#3b82f6", "#fbbf24", "#050a1a", "#0b1430", "#e8efff"),
+            Preset("forest", "Forest", "#4ade80", "#a3e635", "#061009", "#0d1c12", "#e6ffee"),
+            Preset("lava", "Lava", "#ff4d4d", "#ffb347", "#0f0505", "#1c0b0b", "#ffecec"),
+            Preset("coffee", "Coffee", "#d4a373", "#e9c46a", "#14100c", "#211a14", "#f5ead9"),
+            Preset("neon", "Neon Lime", "#a3ff12", "#00e5ff", "#070a06", "#101610", "#f0ffe0"),
+            Preset("sunset", "Sunset", "#f97316", "#ec4899", "#fff8f3", "#ffffff", "#2a1508"),
+            Preset("sakura", "Sakura", "#f472b6", "#a78bfa", "#fff7fb", "#ffffff", "#2d1a2a"),
+            Preset("candy", "Candy", "#8b5cf6", "#06b6d4", "#f7f5ff", "#ffffff", "#1e1538"),
+            Preset("ice", "Ice", "#0ea5e9", "#67e8f9", "#f0f9ff", "#ffffff", "#0c2a3a"),
+            Preset("slate", "Slate Pro", "#475569", "#0ea5e9", "#f1f5f9", "#ffffff", "#0f172a"),
         )
         /** v27.8 element keys + labels (identical to the web panel Theme Studio). */
         val ELEMENT_KEYS: List<Pair<String, String>> = listOf(

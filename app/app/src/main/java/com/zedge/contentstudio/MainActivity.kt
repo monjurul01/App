@@ -2,6 +2,7 @@ package com.zedge.contentstudio
 
 import com.zedge.contentstudio.ui.theme.BrandAmber
 import com.zedge.contentstudio.ui.components.AuroraBackground
+import com.zedge.contentstudio.ui.components.BrandLogo
 import androidx.compose.animation.scaleIn
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -174,13 +175,12 @@ fun AppRoot(vm: MainViewModel, ghVm: GitHubViewModel) {
                 title = {
                     Column {
                         Text(page.title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("Content Studio · Glass", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Meta Hawladar · Glass", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
                 navigationIcon = {
-                    Box(Modifier.padding(start = 14.dp, end = 4.dp).size(32.dp).clip(CircleShape).background(Brush.linearGradient(listOf(BrandHeader, BrandHeaderEnd))), contentAlignment = Alignment.Center) {
-                        Text("CS", color = BrandOnHeader, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.labelMedium)
-                    }
+                    // v27.10 brand logo - re-colours live with the Theme Studio (surface / text / primary)
+                    BrandLogo(size = 34.dp, modifier = Modifier.padding(start = 14.dp, end = 4.dp))
                 },
                 actions = {
                     IconButton(onClick = { showTheme = true }) { Icon(Icons.Default.Palette, contentDescription = "Theme Studio", tint = MaterialTheme.colorScheme.onSurface) }

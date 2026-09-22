@@ -156,6 +156,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 toast("$n new file(s) without metadata - upload bot will skip them until fixed", "error")
             }
         }
+        // v27.11: missed-slot recovery alerts from the workflow gate / bot
+        viewModelScope.launch {
+            (app as com.zedge.contentstudio.ContentStudioApp).slotAlertEvents.collect { (kind, text) ->
+                toast(text, when (kind) { "ok" -> "ok"; "err" -> "error"; else -> "info" })
+            }
+        }
     }
 
     suspend fun confirm(message: String, title: String = "Please confirm", confirmLabel: String = "Continue", destructive: Boolean = false): Boolean {

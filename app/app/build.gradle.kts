@@ -12,8 +12,8 @@ android {
         applicationId = "com.zedge.contentstudio"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.2.0"
+        versionCode = 4
+        versionName = "2.3.1"
         vectorDrawables { useSupportLibrary = true }
     }
 

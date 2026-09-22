@@ -810,7 +810,7 @@ private fun MixModeCard(vm: MainViewModel, activeKey: String) {
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { draft = draft.copy(strict = !draft.strict) }) {
                         Checkbox(checked = draft.strict, onCheckedChange = { draft = draft.copy(strict = it) })
-                        Text("Strict: never repeat a type the same day (wait instead of falling back)", style = MaterialTheme.typography.bodySmall)
+                        Text("Strict: prefer a different type for every slot (repeats only when no other type has stock - a slot is never left empty)", style = MaterialTheme.typography.bodySmall)
                     }
                     val order = VarietyConfig.orderToday(draft.types)
                     Text("Order today: " + order.joinToString(" › ") { VarietyConfig.label(it) }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
