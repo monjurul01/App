@@ -19,9 +19,10 @@ data class Account(val key: String, val label: String, val databaseUrl: String)
 
 object Accounts {
     val all: List<Account> = listOf(
-        Account("zedge1", "ZEDGE1", "https://zedge-r2-edward-hermes-default-rtdb.firebaseio.com"), // <-- CONFIG
-        Account("zedge2", "ZEDGE2", "https://zedge-r2-ryan-hermes-default-rtdb.firebaseio.com"), // <-- CONFIG
-        Account("zedge3", "ZEDGE3", "https://zedge-r2-christian-hermes-default-rtdb.firebaseio.com"), // <-- CONFIG
+        Account("zedge1", "ZEDGE1", "https://YOUR-ZEDGE1-PROJECT-default-rtdb.firebaseio.com"), // <-- CONFIG
+        Account("zedge2", "ZEDGE2", "https://YOUR-ZEDGE2-PROJECT-default-rtdb.firebaseio.com"), // <-- CONFIG
+        Account("zedge3", "ZEDGE3", "https://YOUR-ZEDGE3-PROJECT-default-rtdb.firebaseio.com"), // <-- CONFIG
+        Account("zedge4", "ZEDGE4", "https://YOUR-ZEDGE4-PROJECT-default-rtdb.firebaseio.com"), // <-- CONFIG
     )
     val keys: List<String> = all.map { it.key }
     /** Round-robin order used by Multi-Account Distribution. */
@@ -29,7 +30,7 @@ object Accounts {
     fun byKey(key: String): Account = all.firstOrNull { it.key == key } ?: all[0]
     fun isValid(key: String?): Boolean = key != null && all.any { it.key == key }
 
-    const val R2_WORKER_URL = "https://zedgemedia.monjurulgd2001.workers.dev" // <-- CONFIG: your Cloudflare R2 worker URL
+    const val R2_WORKER_URL = "https://YOUR-R2-WORKER.YOUR-SUBDOMAIN.workers.dev" // <-- CONFIG: your Cloudflare R2 worker URL
     const val QUEUE_PATH = "wallpaperQueue"
     const val STATE_PATH = "uploadState"
     const val GH_SETTINGS_PATH = "dashboardSettings/ghPanel"
