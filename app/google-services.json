@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "578921240339",
+    "project_id": "globe-daily-news24",
+    "storage_bucket": "globe-daily-news24.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:578921240339:android:e5691f0771dc74522e2ce6",
+        "android_client_info": {
+          "package_name": "com.volunteernews24.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDroyX64CDwD33c5mv5-DuX0tjFaxGpvC4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
