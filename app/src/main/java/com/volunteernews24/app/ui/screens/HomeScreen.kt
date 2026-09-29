@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,22 +31,22 @@ fun HomeScreen(
     onBookmarkClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val pullToRefreshState = rememberPullToRefreshState()
-    
-    if (pullToRefreshState.isRefreshing) {
-        LaunchedEffect(true) {
-            onRefresh()
-            pullToRefreshState.endRefresh()
+    var isRefreshing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isLoading) {
+        if (!isLoading) {
+            isRefreshing = false
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        PullToRefreshContainer(
-            state = pullToRefreshState,
-            modifier = Modifier.align(Alignment.TopCenter),
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = VNRed
-        )
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = {
+            isRefreshing = true
+            onRefresh()
+        },
+        modifier = modifier.fillMaxSize()
+    ) {
 
         LazyColumn(
             modifier = Modifier
