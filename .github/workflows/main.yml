@@ -1,23 +1,5 @@
 name: Build Release APK
 
-# Builds a signed release APK of Content Studio (Kotlin + Jetpack Compose).
-#
-# Triggers:
-#   - Manually from the Actions tab (workflow_dispatch)
-#   - On every push of a version tag, e.g. `git tag v2.0.0 && git push --tags`
-#     -> also publishes a GitHub Release with the APK attached
-#
-# Required repository secrets (Settings -> Secrets and variables -> Actions):
-#   KEYSTORE_BASE64    base64 of your .jks/.keystore file  (base64 -w0 release.jks)
-#   KEYSTORE_PASSWORD  keystore password
-#   KEY_ALIAS          key alias inside the keystore
-#   KEY_PASSWORD       key password
-#
-# If the secrets are NOT set, a throwaway keystore is generated so the APK is
-# still installable for testing -- but every build will be signed with a
-# different key, so users won't be able to update in place. Add real secrets
-# before distributing.
-
 on:
   workflow_dispatch:
   push:
@@ -25,11 +7,9 @@ on:
       - "v*"
 
 permissions:
-  contents: write   # needed to create the GitHub Release on tag pushes
+  contents: write
 
 env:
-  # Change this if the Android project lives in a sub-folder of the repo
-  # (e.g. "ContentStudioNative"). Use "." when build.gradle.kts is at the root.
   PROJECT_DIR: .
   GRADLE_VERSION: "8.9"
 
@@ -88,11 +68,11 @@ jobs:
             echo "::warning::No KEYSTORE_BASE64 secret found - generating a throwaway keystore. Add signing secrets before distributing this APK."
             keytool -genkeypair -v \
               -keystore "$KS_PATH" -storetype PKCS12 \
-              -alias contentstudio -keyalg RSA -keysize 2048 -validity 10000 \
+              -alias volunteernews24 -keyalg RSA -keysize 2048 -validity 10000 \
               -storepass tempstorepass -keypass tempstorepass \
-              -dname "CN=Content Studio CI, OU=CI, O=ContentStudio, C=US"
+              -dname "CN=VolunteerNews24 CI, OU=CI, O=VolunteerNews24, C=BD"
             echo "KEYSTORE_PASSWORD=tempstorepass" >> "$GITHUB_ENV"
-            echo "KEY_ALIAS=contentstudio"         >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=volunteernews24"         >> "$GITHUB_ENV"
             echo "KEY_PASSWORD=tempstorepass"      >> "$GITHUB_ENV"
             echo "signed_with=throwaway" >> "$GITHUB_OUTPUT"
           fi
@@ -120,13 +100,12 @@ jobs:
             exit 1
           fi
 
-          # Pull versionName from app/build.gradle.kts, fall back to the tag / run number
           VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts || true)
           if [ -z "$VERSION" ]; then
             VERSION="${GITHUB_REF_NAME#v}"
           fi
 
-          OUT_NAME="ContentStudio-v${VERSION}-release.apk"
+          OUT_NAME="VolunteerNews24-v${VERSION}-release.apk"
           mkdir -p "$RUNNER_TEMP/dist"
           cp "$APK" "$RUNNER_TEMP/dist/$OUT_NAME"
 
@@ -153,11 +132,11 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          name: Content Studio ${{ github.ref_name }}
+          name: VolunteerNews24 ${{ github.ref_name }}
           files: ${{ steps.apk.outputs.path }}
           generate_release_notes: true
           body: |
-            Release APK for Content Studio **${{ steps.apk.outputs.version }}**.
+            Release APK for VolunteerNews24 **${{ steps.apk.outputs.version }}**.
 
             Signed with: `${{ steps.keystore.outputs.signed_with }}` keystore.
             Min Android 8.0 (API 26).
