@@ -1,5 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Meta Hawladar</string>
-    <string name="share_target_label">Import to Meta Hawladar</string>
+    <string name="app_name">VolunteerNews24</string>
+    <string name="home">হোম</string>
+    <string name="categories">বিভাগসমূহ</string>
+    <string name="bookmarks">সংরক্ষিত</string>
+    <string name="library">লাইব্রেরি</string>
+    <string name="search_hint">সংবাদ অনুসন্ধান করুন…</string>
+    <string name="no_bookmarks">কোনো সংরক্ষিত সংবাদ নেই</string>
+    <string name="no_articles">কোনো সংবাদ পাওয়া যায়নি</string>
+    <string name="loading">লোড হচ্ছে…</string>
+    <string name="error_loading">সংবাদ লোড করতে ত্রুটি হয়েছে</string>
+    <string name="retry">পুনরায় চেষ্টা করুন</string>
+    <string name="offline_mode">অফলাইন মোড</string>
+    <string name="share">শেয়ার করুন</string>
+    <string name="bookmark_added">সংবাদ সংরক্ষিত হয়েছে</string>
+    <string name="bookmark_removed">সংবাদ সংরক্ষণ বাতিল হয়েছে</string>
+    <string name="smart_green_library">Smart Green Library</string>
+    <string name="notification_channel_name">নতুন সংবাদ</string>
+    <string name="notification_channel_desc">নতুন সংবাদ প্রকাশিত হলে বিজ্ঞপ্তি পান</string>
+    <string name="read_more">বিস্তারিত পড়ুন</string>
+    <string name="back">পিছনে</string>
+    <string name="pull_to_refresh">রিফ্রেশ করতে টানুন</string>
 </resources>

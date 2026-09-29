@@ -1,12 +1,17 @@
--keep class com.github.junrar.** { *; }
--dontwarn com.github.junrar.**
--dontwarn okhttp3.**
--dontwarn okio.**
--keepattributes *Annotation*
+# Add project specific ProGuard rules here.
+-keepattributes SourceFile,LineNumberTable
+-keep public class * extends java.lang.Exception
 
-# slf4j (pulled in by junrar) - no Android binding, safe to ignore
--dontwarn org.slf4j.**
--dontwarn org.slf4j.impl.StaticLoggerBinder
--dontwarn org.slf4j.impl.StaticMDCBinder
--dontwarn org.slf4j.impl.StaticMarkerBinder
--dontwarn java.lang.invoke.StringConcatFactory
+# Jsoup
+-keeppackagenames org.jsoup.nodes
+
+# Room
+-keep class * extends androidx.room.RoomDatabase
+-keep @androidx.room.Entity class *
+-dontwarn androidx.room.paging.**
+
+# Firebase
+-keep class com.google.firebase.** { *; }
+
+# Coil
+-keep class coil.** { *; }
