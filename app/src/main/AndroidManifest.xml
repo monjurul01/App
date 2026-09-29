@@ -11,7 +11,7 @@
         android:allowBackup="true"
         android:icon="@drawable/app_icon"
         android:label="@string/app_name"
-        android:roundIcon="@drawable/app_icon_round"
+        android:roundIcon="@drawable/app_icon"
         android:supportsRtl="true"
         android:theme="@style/Theme.VolunteerNews24"
         android:usesCleartextTraffic="true"
