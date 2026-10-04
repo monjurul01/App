@@ -1,142 +1,315 @@
-name: Build Release APK
+name: Build Desktop App
+
+# Builds the Meta Monjurul desktop app (Kotlin + Compose for Desktop) for
+# Windows, and optionally Linux + macOS, on GitHub's own machines - no
+# Gradle / JDK needed on your PC.
+#
+# How to use (same idea as the Meta Hawladar `main (1).yml`):
+#   1. Push this folder to a GitHub repository (the folder itself as
+#      the repo root, OR the whole bundle - the workflow finds
+#      build.gradle.kts).
+#   2. GitHub -> Actions -> "Build Desktop App" -> Run workflow.
+#   3. When it finishes, open the run -> Artifacts -> download
+#      `MetaMonjurul-windows-x64-setup-v<version>` -> inside is the
+#      real Windows installer (`...-setup-v<version>.msi`): double-click
+#      -> Next -> Install. It adds Start-menu + Desktop shortcuts and an
+#      "Apps & features" uninstall entry, and upgrades in place when you
+#      install a newer version.
+#      The portable build `MetaMonjurul-windows-x64-v<version>.zip`
+#      (extract + run the .exe, no install) is still
+#      uploaded next to it.
+#   4. Push a version tag (`git tag v1.0.0 && git push --tags`) to also get a
+#      GitHub Release with every platform attached.
+#
+# No secrets are required. Gradle comes from gradle/actions/setup-gradle
+# (no gradle-wrapper.jar needed in the repo).
 
 on:
   workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Which desktop builds to make"
+        type: choice
+        default: windows
+        options:
+          - windows
+          - windows+linux
+          - all
   push:
     tags:
       - "v*"
 
 permissions:
-  contents: write
+  contents: write   # needed to create the GitHub Release on tag pushes
 
 env:
-  PROJECT_DIR: .
-  GRADLE_VERSION: "8.9"
+  # JDK + Gradle used on the build machines. Pinned on purpose:
+  # Compose Desktop 1.6.10 + Kotlin 2.0.0 need JDK 17+; 21 is the LTS sweet
+  # spot. Bump only after testing the full matrix locally.
+  JAVA_VERSION: "21"
+  GRADLE_VERSION: "8.7"
+  JAVA_DIST: temurin
+  # Set to the sub-folder that contains build.gradle.kts, or leave "auto" to
+  # let the workflow find it (repo root, ./desktop or ./meta-monjurul).
+  PROJECT_DIR: auto
 
 jobs:
-  build:
-    name: Assemble release APK
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-
+  # ---------------------------------------------------------------- Windows
+  windows:
+    name: Windows x64
+    runs-on: windows-2022
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Locate Gradle project
+        id: dir
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR="${PROJECT_DIR}"
+          if [ "$DIR" = "auto" ]; then
+            for c in . desktop meta-monjurul MetaMonjurul; do
+              if [ -f "$c/build.gradle.kts" ]; then DIR="$c"; break; fi
+            done
+          fi
+          if [ ! -f "$DIR/build.gradle.kts" ]; then echo "::error::build.gradle.kts not found"; exit 1; fi
+          VERSION=$(grep -E '^version[[:space:]]*=' "$DIR/build.gradle.kts" | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Project dir: $DIR  version: $VERSION"
+
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: "17"
+          distribution: ${{ env.JAVA_DIST }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'gradle'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: >-
-            platform-tools
-            platforms;android-35
-            build-tools;35.0.0
-
-      - name: Set up Gradle ${{ env.GRADLE_VERSION }}
-        # The repo ships without gradlew / gradle-wrapper.jar, so we install
-        # Gradle directly. Also enables dependency + build caching.
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
-          cache-read-only: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
 
-      - name: Prepare signing keystore
-        id: keystore
-        working-directory: ${{ env.PROJECT_DIR }}
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      - name: Gradle version
+        working-directory: ${{ steps.dir.outputs.dir }}
+        run: gradle --version
+
+      - name: Build Windows release (MSI)
+        working-directory: ${{ steps.dir.outputs.dir }}
+        run: gradle packageMsi --no-daemon
+
+      - name: Package portable zip
+        id: pkg
+        working-directory: ${{ steps.dir.outputs.dir }}
+        shell: pwsh
         run: |
-          set -euo pipefail
-          KS_PATH="$RUNNER_TEMP/release.keystore"
+          $ver = "${{ steps.dir.outputs.version }}"
+          $out = "MetaMonjurul-windows-x64-v$ver"
+          # Compose Desktop native exe lives next to the .msi output
+          $bin = Get-ChildItem -Directory -Recurse "build/compose/binaries" | Where-Object { $_.FullName -match 'main\\(app|exe)$' } | Select-Object -First 1
+          if (-not $bin) { $bin = Get-ChildItem -Directory -Recurse "build/compose" | Where-Object { $_.Name -in @("app","exe") } | Select-Object -First 1 }
+          if (-not $bin) { Write-Error "Portable app folder not found under build/compose"; exit 1 }
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP/dist/$out" | Out-Null
+          Copy-Item -Path "$($bin.FullName)/*" -Destination "$env:RUNNER_TEMP/dist/$out" -Recurse
+          Copy-Item -Path README.md -Destination "$env:RUNNER_TEMP/dist/$out/README.md" -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$env:RUNNER_TEMP/dist/$out" -DestinationPath "$env:RUNNER_TEMP/dist/$out.zip" -Force
+          "path=$env:RUNNER_TEMP/dist/$out.zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "name=$out" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Built $out.zip"
 
-          if [ -n "${KEYSTORE_BASE64}" ]; then
-            echo "Using keystore from repository secrets."
-            echo "${KEYSTORE_BASE64}" | base64 --decode > "$KS_PATH"
-            echo "KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}" >> "$GITHUB_ENV"
-            echo "KEY_ALIAS=${KEY_ALIAS}"                 >> "$GITHUB_ENV"
-            echo "KEY_PASSWORD=${KEY_PASSWORD}"           >> "$GITHUB_ENV"
-            echo "signed_with=secrets" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::No KEYSTORE_BASE64 secret found - generating a throwaway keystore. Add signing secrets before distributing this APK."
-            keytool -genkeypair -v \
-              -keystore "$KS_PATH" -storetype PKCS12 \
-              -alias volunteernews24 -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass tempstorepass -keypass tempstorepass \
-              -dname "CN=VolunteerNews24 CI, OU=CI, O=VolunteerNews24, C=BD"
-            echo "KEYSTORE_PASSWORD=tempstorepass" >> "$GITHUB_ENV"
-            echo "KEY_ALIAS=volunteernews24"         >> "$GITHUB_ENV"
-            echo "KEY_PASSWORD=tempstorepass"      >> "$GITHUB_ENV"
-            echo "signed_with=throwaway" >> "$GITHUB_OUTPUT"
-          fi
-
-          echo "KEYSTORE_PATH=$KS_PATH" >> "$GITHUB_ENV"
-
-      - name: Build release APK
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          set -euo pipefail
-          if [ -x ./gradlew ]; then
-            ./gradlew --no-daemon --stacktrace :app:assembleRelease
-          else
-            gradle --no-daemon --stacktrace :app:assembleRelease
-          fi
-
-      - name: Collect APK
-        id: apk
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          set -euo pipefail
-          APK=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
-          if [ -z "$APK" ]; then
-            echo "::error::No APK found under app/build/outputs/apk/release"
-            exit 1
-          fi
-
-          VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts || true)
-          if [ -z "$VERSION" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          fi
-
-          OUT_NAME="VolunteerNews24-v${VERSION}-release.apk"
-          mkdir -p "$RUNNER_TEMP/dist"
-          cp "$APK" "$RUNNER_TEMP/dist/$OUT_NAME"
-
-          echo "Built: $OUT_NAME ($(du -h "$APK" | cut -f1))"
-          echo "path=$RUNNER_TEMP/dist/$OUT_NAME" >> "$GITHUB_OUTPUT"
-          echo "name=$OUT_NAME" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Verify APK signature
-        run: |
-          set -euo pipefail
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
-          "$APKSIGNER" verify --print-certs "${{ steps.apk.outputs.path }}"
-
-      - name: Upload APK artifact
+      - name: Upload artifact (portable zip)
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.apk.outputs.name }}
-          path: ${{ steps.apk.outputs.path }}
+          name: ${{ steps.pkg.outputs.name }}
+          path: ${{ steps.pkg.outputs.path }}
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+      # Real Windows installer: Compose Desktop already builds a proper .msi
+      # (per-machine / per-user, Start-menu + Desktop shortcuts, uninstall
+      # entry) - this step just renames it to the release convention.
+      - name: Rename Windows installer (MSI)
+        id: inst
+        working-directory: ${{ steps.dir.outputs.dir }}
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.dir.outputs.version }}"
+          $msi = Get-ChildItem -File -Recurse "build/compose/binaries" -Filter *.msi | Select-Object -First 1
+          if (-not $msi) { Write-Error "MSI installer not found under build/compose/binaries"; exit 1 }
+          $name = "MetaMonjurul-windows-x64-setup-v$ver"
+          $outDir = Join-Path $env:RUNNER_TEMP "dist-installer"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          $dest = Join-Path $outDir "$name.msi"
+          Copy-Item -Path $msi.FullName -Destination $dest -Force
+          Get-Item $dest | Format-List Name, Length
+          "path=$dest" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "name=$name" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Built $name.msi"
+
+      - name: Upload artifact (Windows installer)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.inst.outputs.name }}
+          path: ${{ steps.inst.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+
+  # ---------------------------------------------------------------- Linux
+  linux:
+    name: Linux x64
+    if: ${{ github.event_name == 'push' || inputs.platforms == 'windows+linux' || inputs.platforms == 'all' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Locate Gradle project
+        id: dir
+        run: |
+          set -euo pipefail
+          DIR="${PROJECT_DIR}"
+          if [ "$DIR" = "auto" ]; then
+            for c in . desktop meta-monjurul MetaMonjurul; do
+              if [ -f "$c/build.gradle.kts" ]; then DIR="$c"; break; fi
+            done
+          fi
+          if [ ! -f "$DIR/build.gradle.kts" ]; then echo "::error::build.gradle.kts not found"; exit 1; fi
+          VERSION=$(grep -E '^version[[:space:]]*=' "$DIR/build.gradle.kts" | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DIST }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'gradle'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+
+      - name: Build Linux release (DEB)
+        working-directory: ${{ steps.dir.outputs.dir }}
+        run: gradle packageDeb --no-daemon
+
+      - name: Package
+        id: pkg
+        working-directory: ${{ steps.dir.outputs.dir }}
+        run: |
+          set -euo pipefail
+          OUT="MetaMonjurul-linux-x64-v${{ steps.dir.outputs.version }}"
+          DEB=$(find build/compose -name '*.deb' | head -n1)
+          [ -n "$DEB" ] || { echo "::error::.deb not found"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/dist/$OUT"
+          cp "$DEB" "$RUNNER_TEMP/dist/$OUT/"
+          cp README.md "$RUNNER_TEMP/dist/$OUT/" || true
+          tar -C "$RUNNER_TEMP/dist" -czf "$RUNNER_TEMP/dist/$OUT.tar.gz" "$OUT"
+          echo "path=$RUNNER_TEMP/dist/$OUT.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "name=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pkg.outputs.name }}
+          path: ${{ steps.pkg.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+
+  # ---------------------------------------------------------------- macOS
+  macos:
+    name: macOS (universal)
+    if: ${{ github.event_name == 'push' || inputs.platforms == 'all' }}
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Locate Gradle project
+        id: dir
+        run: |
+          set -euo pipefail
+          DIR="${PROJECT_DIR}"
+          if [ "$DIR" = "auto" ]; then
+            for c in . desktop meta-monjurul MetaMonjurul; do
+              if [ -f "$c/build.gradle.kts" ]; then DIR="$c"; break; fi
+            done
+          fi
+          if [ ! -f "$DIR/build.gradle.kts" ]; then echo "::error::build.gradle.kts not found"; exit 1; fi
+          VERSION=$(grep -E '^version[[:space:]]*=' "$DIR/build.gradle.kts" | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DIST }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'gradle'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+
+      - name: Build macOS release (DMG)
+        working-directory: ${{ steps.dir.outputs.dir }}
+        run: gradle packageDmg --no-daemon
+
+      - name: Package
+        id: pkg
+        working-directory: ${{ steps.dir.outputs.dir }}
+        run: |
+          set -euo pipefail
+          OUT="MetaMonjurul-macos-v${{ steps.dir.outputs.version }}"
+          DMG=$(find build/compose -name '*.dmg' | head -n1)
+          [ -n "$DMG" ] || { echo "::error::.dmg not found"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/dist"
+          cp "$DMG" "$RUNNER_TEMP/dist/$OUT.dmg"
+          echo "path=$RUNNER_TEMP/dist/$OUT.dmg" >> "$GITHUB_OUTPUT"
+          echo "name=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pkg.outputs.name }}
+          path: ${{ steps.pkg.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+
+  # ---------------------------------------------------------------- Release (tags only)
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish
         uses: softprops/action-gh-release@v2
         with:
-          name: VolunteerNews24 ${{ github.ref_name }}
-          files: ${{ steps.apk.outputs.path }}
+          name: Meta Monjurul Desktop ${{ github.ref_name }}
+          files: dist/**
           generate_release_notes: true
           body: |
-            Release APK for VolunteerNews24 **${{ steps.apk.outputs.version }}**.
+            Meta Monjurul desktop app **${{ github.ref_name }}**.
 
-            Signed with: `${{ steps.keystore.outputs.signed_with }}` keystore.
-            Min Android 8.0 (API 26).
+            * Windows (recommended): run `MetaMonjurul-windows-x64-setup-v....msi` -> Next -> Install (Start-menu + Desktop shortcut, uninstall from Apps & features). Unsigned build: if SmartScreen shows "Windows protected your PC", click *More info -> Run anyway*.
+            * Windows portable: extract `MetaMonjurul-windows-x64-v....zip` and run the `.exe` (keep all files together).
+            * Linux: install the `.deb` from the tarball (`sudo apt install ./....deb`).
+            * macOS: open the `.dmg`, drag the app to Applications (unsigned build: right-click -> Open).
