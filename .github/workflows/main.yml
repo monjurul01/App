@@ -1,28 +1,28 @@
 name: Build Desktop App
 
-# Builds the Meta Monjurul desktop app (Kotlin + Compose for Desktop) for
-# Windows, and optionally Linux + macOS, on GitHub's own machines - no
-# Gradle / JDK needed on your PC.
+# Builds the Meta Hawladar desktop app (Flutter) for Windows, and optionally
+# Linux + macOS, on GitHub's own machines - no Flutter / Visual Studio needed
+# on your PC.
 #
-# How to use (same idea as the Meta Hawladar `main (1).yml`):
-#   1. Push this folder to a GitHub repository (the folder itself as
-#      the repo root, OR the whole bundle - the workflow finds
-#      build.gradle.kts).
+# How to use (same idea as the Android `release-apk.yml`):
+#   1. Push this `desktop` folder to a GitHub repository (the folder itself as
+#      the repo root, OR the whole bundle - the workflow finds pubspec.yaml).
 #   2. GitHub -> Actions -> "Build Desktop App" -> Run workflow.
 #   3. When it finishes, open the run -> Artifacts -> download
-#      `MetaMonjurul-windows-x64-setup-v<version>` -> inside is the
-#      real Windows installer (`...-setup-v<version>.msi`): double-click
-#      -> Next -> Install. It adds Start-menu + Desktop shortcuts and an
-#      "Apps & features" uninstall entry, and upgrades in place when you
-#      install a newer version.
-#      The portable build `MetaMonjurul-windows-x64-v<version>.zip`
-#      (extract + run the .exe, no install) is still
+#      `MetaHawladar-<profile>-windows-x64-setup-v<version>` -> inside is the
+#      real Windows installer (`...-setup-v<version>.exe`, built with Inno
+#      Setup): double-click -> Next -> Install. It goes to Program Files (or
+#      the per-user Programs folder without admin), adds Start-menu + Desktop
+#      shortcuts and an "Apps & features" uninstall entry, and upgrades in
+#      place when you install a newer version.
+#      The portable build `MetaHawladar-<profile>-windows-x64-v<version>.zip`
+#      (extract + run `MetaHawladar.exe`, no install) is still
 #      uploaded next to it.
-#   4. Push a version tag (`git tag v1.0.0 && git push --tags`) to also get a
+#   4. Push a version tag (`git tag v27.9.0 && git push --tags`) to also get a
 #      GitHub Release with every platform attached.
 #
-# No secrets are required. Gradle comes from gradle/actions/setup-gradle
-# (no gradle-wrapper.jar needed in the repo).
+# No secrets are required. BUILD_PROFILE selects the customer bundle that is
+# compiled in (see lib/config/profile_data.dart).
 
 on:
   workflow_dispatch:
@@ -43,76 +43,103 @@ permissions:
   contents: write   # needed to create the GitHub Release on tag pushes
 
 env:
-  # JDK + Gradle used on the build machines. Pinned on purpose:
-  # Compose Desktop 1.6.10 + Kotlin 2.0.0 need JDK 17+; 21 is the LTS sweet
-  # spot. Bump only after testing the full matrix locally.
-  JAVA_VERSION: "21"
-  GRADLE_VERSION: "8.7"
-  JAVA_DIST: temurin
-  # Set to the sub-folder that contains build.gradle.kts, or leave "auto" to
-  # let the workflow find it (repo root, ./desktop or ./meta-monjurul).
+  # Flutter version used on the build machines. Pinned on purpose: newer
+  # stable releases made `IconData` a final class, which breaks
+  # font_awesome_flutter 10.x ("IconData can't be extended outside of its
+  # library"). Bump this only after font_awesome_flutter publishes a fix.
+  FLUTTER_VERSION: "3.35.x"
+  BUILD_PROFILE: template
+  FLUTTER_CHANNEL: stable
+  # Set to the sub-folder that contains pubspec.yaml, or leave "auto" to let the
+  # workflow find it (repo root, ./desktop or ./automation_hub_desktop).
   PROJECT_DIR: auto
 
 jobs:
   # ---------------------------------------------------------------- Windows
   windows:
     name: Windows x64
+    # windows-2022 = Visual Studio 2022 (v17). `windows-latest` now ships
+    # Visual Studio 2026 (v18), which Flutter 3.35 does not detect
+    # ("could not find any instance of Visual Studio").
     runs-on: windows-2022
     timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Locate Gradle project
+      - name: Locate Flutter project
         id: dir
         shell: bash
         run: |
           set -euo pipefail
           DIR="${PROJECT_DIR}"
           if [ "$DIR" = "auto" ]; then
-            for c in . desktop meta-monjurul MetaMonjurul; do
-              if [ -f "$c/build.gradle.kts" ]; then DIR="$c"; break; fi
+            for c in . desktop automation_hub_desktop; do
+              if [ -f "$c/pubspec.yaml" ]; then DIR="$c"; break; fi
             done
           fi
-          if [ ! -f "$DIR/build.gradle.kts" ]; then echo "::error::build.gradle.kts not found"; exit 1; fi
-          VERSION=$(grep -E '^version[[:space:]]*=' "$DIR/build.gradle.kts" | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ ! -f "$DIR/pubspec.yaml" ]; then echo "::error::pubspec.yaml not found"; exit 1; fi
+          VERSION=$(grep -E '^version:' "$DIR/pubspec.yaml" | head -n1 | sed -E 's/version:[[:space:]]*//; s/\+.*//')
           echo "dir=$DIR" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Project dir: $DIR  version: $VERSION"
 
-      - name: Set up JDK
-        uses: actions/setup-java@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
-          distribution: ${{ env.JAVA_DIST }}
-          java-version: ${{ env.JAVA_VERSION }}
-          cache: 'gradle'
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: ${{ env.GRADLE_VERSION }}
+      - name: Flutter doctor
+        run: flutter doctor -v
 
-      - name: Gradle version
+      - name: Generate Windows runner (first time only)
         working-directory: ${{ steps.dir.outputs.dir }}
-        run: gradle --version
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter config --enable-windows-desktop
+          if [ ! -d windows ]; then
+            flutter create . --platforms=windows --project-name automation_hub_desktop --org com.automationhub
+          fi
 
-      - name: Build Windows release (MSI)
+      - name: Apply app icon + product name (replaces the Flutter default icon)
         working-directory: ${{ steps.dir.outputs.dir }}
-        run: gradle packageMsi --no-daemon
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -f assets/icon/app_icon.ico windows/runner/resources/app_icon.ico
+          # exe metadata shown in Properties / Task Manager
+          sed -i 's/VALUE "FileDescription", "automation_hub_desktop"/VALUE "FileDescription", "Meta Hawladar - Zedge Content Studio"/; s/VALUE "ProductName", "automation_hub_desktop"/VALUE "ProductName", "Meta Hawladar"/; s/VALUE "CompanyName", "com.automationhub"/VALUE "CompanyName", "Meta Hawladar"/' windows/runner/Runner.rc || true
+          ls -la windows/runner/resources/
+          # exe name (MetaHawladar.exe instead of automation_hub_desktop.exe) + initial window title
+          sed -i 's/set(BINARY_NAME "automation_hub_desktop")/set(BINARY_NAME "MetaHawladar")/' windows/CMakeLists.txt || true
+          sed -i 's/L"automation_hub_desktop"/L"Meta Hawladar"/g' windows/runner/main.cpp || true
+          grep -n BINARY_NAME windows/CMakeLists.txt | head -n 2
 
-      - name: Package portable zip
+      - name: Pub get
+        working-directory: ${{ steps.dir.outputs.dir }}
+        run: flutter pub get
+
+      - name: Analyze (errors only)
+        working-directory: ${{ steps.dir.outputs.dir }}
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Build Windows release
+        working-directory: ${{ steps.dir.outputs.dir }}
+        run: flutter build windows --release --dart-define=BUILD=${{ env.BUILD_PROFILE }}
+
+      - name: Package
         id: pkg
         working-directory: ${{ steps.dir.outputs.dir }}
         shell: pwsh
         run: |
-          $ver = "${{ steps.dir.outputs.version }}"
-          $out = "MetaMonjurul-windows-x64-v$ver"
-          # Compose Desktop native exe lives next to the .msi output
-          $bin = Get-ChildItem -Directory -Recurse "build/compose/binaries" | Where-Object { $_.FullName -match 'main\\(app|exe)$' } | Select-Object -First 1
-          if (-not $bin) { $bin = Get-ChildItem -Directory -Recurse "build/compose" | Where-Object { $_.Name -in @("app","exe") } | Select-Object -First 1 }
-          if (-not $bin) { Write-Error "Portable app folder not found under build/compose"; exit 1 }
+          $out = "MetaHawladar-${env:BUILD_PROFILE}-windows-x64-v${{ steps.dir.outputs.version }}"
+          $rel = Get-ChildItem -Directory -Recurse build/windows | Where-Object { $_.FullName -match 'runner\\Release$' } | Select-Object -First 1
+          if (-not $rel) { Write-Error "Release folder not found under build/windows"; exit 1 }
           New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP/dist/$out" | Out-Null
-          Copy-Item -Path "$($bin.FullName)/*" -Destination "$env:RUNNER_TEMP/dist/$out" -Recurse
+          Copy-Item -Path "$($rel.FullName)/*" -Destination "$env:RUNNER_TEMP/dist/$out" -Recurse
           Copy-Item -Path README.md -Destination "$env:RUNNER_TEMP/dist/$out/README.md" -ErrorAction SilentlyContinue
           Compress-Archive -Path "$env:RUNNER_TEMP/dist/$out" -DestinationPath "$env:RUNNER_TEMP/dist/$out.zip" -Force
           "path=$env:RUNNER_TEMP/dist/$out.zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
@@ -127,26 +154,38 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      # Real Windows installer: Compose Desktop already builds a proper .msi
-      # (per-machine / per-user, Start-menu + Desktop shortcuts, uninstall
-      # entry) - this step just renames it to the release convention.
-      - name: Rename Windows installer (MSI)
+      # Real Windows installer (setup.exe) built with Inno Setup 6, which is
+      # pre-installed on the GitHub windows runners. Script + wizard images
+      # live in installer/ (installer/windows.iss).
+      - name: Build Windows installer (Inno Setup)
         id: inst
         working-directory: ${{ steps.dir.outputs.dir }}
         shell: pwsh
         run: |
-          $ver = "${{ steps.dir.outputs.version }}"
-          $msi = Get-ChildItem -File -Recurse "build/compose/binaries" -Filter *.msi | Select-Object -First 1
-          if (-not $msi) { Write-Error "MSI installer not found under build/compose/binaries"; exit 1 }
-          $name = "MetaMonjurul-windows-x64-setup-v$ver"
+          # exit codes are checked explicitly below (native stderr chatter must not abort the step)
+          $ErrorActionPreference = "Continue"
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            Write-Host "Inno Setup not found on runner - installing via Chocolatey"
+            choco install innosetup --no-progress -y | Out-Null
+          }
+          if (-not (Test-Path $iscc)) { Write-Error "ISCC.exe not found at $iscc"; exit 1 }
+          $rel = Get-ChildItem -Directory -Recurse build/windows | Where-Object { $_.FullName -match 'runner\\Release$' } | Select-Object -First 1
+          if (-not $rel) { Write-Error "Release folder not found under build/windows"; exit 1 }
+          $ver  = "${{ steps.dir.outputs.version }}"
+          $name = "MetaHawladar-${env:BUILD_PROFILE}-windows-x64-setup-v$ver"
           $outDir = Join-Path $env:RUNNER_TEMP "dist-installer"
           New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-          $dest = Join-Path $outDir "$name.msi"
-          Copy-Item -Path $msi.FullName -Destination $dest -Force
-          Get-Item $dest | Format-List Name, Length
-          "path=$dest" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $exeFile = Get-ChildItem -Path $rel.FullName -Filter *.exe -File | Select-Object -First 1
+          if (-not $exeFile) { Write-Error "No .exe in $($rel.FullName)"; exit 1 }
+          & $iscc "/DMyAppExeName=$($exeFile.Name)" "/DMyAppVersion=$ver" "/DMyProfile=${env:BUILD_PROFILE}" "/DMySourceDir=$($rel.FullName)" "/DMyOutputDir=$outDir" "/DMyOutputBaseFilename=$name" "installer\windows.iss"
+          if ($LASTEXITCODE -ne 0) { Write-Error "Inno Setup compile failed ($LASTEXITCODE)"; exit 1 }
+          $exe = Join-Path $outDir "$name.exe"
+          if (-not (Test-Path $exe)) { Write-Error "Installer not produced: $exe"; exit 1 }
+          Get-Item $exe | Format-List Name, Length
+          "path=$exe" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "name=$name" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          Write-Host "Built $name.msi"
+          Write-Host "Built $name.exe"
 
       - name: Upload artifact (Windows installer)
         uses: actions/upload-artifact@v4
@@ -166,52 +205,85 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Locate Gradle project
+      - name: Locate Flutter project
         id: dir
         run: |
           set -euo pipefail
           DIR="${PROJECT_DIR}"
           if [ "$DIR" = "auto" ]; then
-            for c in . desktop meta-monjurul MetaMonjurul; do
-              if [ -f "$c/build.gradle.kts" ]; then DIR="$c"; break; fi
+            for c in . desktop automation_hub_desktop; do
+              if [ -f "$c/pubspec.yaml" ]; then DIR="$c"; break; fi
             done
           fi
-          if [ ! -f "$DIR/build.gradle.kts" ]; then echo "::error::build.gradle.kts not found"; exit 1; fi
-          VERSION=$(grep -E '^version[[:space:]]*=' "$DIR/build.gradle.kts" | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ ! -f "$DIR/pubspec.yaml" ]; then echo "::error::pubspec.yaml not found"; exit 1; fi
+          VERSION=$(grep -E '^version:' "$DIR/pubspec.yaml" | head -n1 | sed -E 's/version:[[:space:]]*//; s/\+.*//')
           echo "dir=$DIR" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev mpv libstdc++-12-dev
 
-      - name: Set up JDK
-        uses: actions/setup-java@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
-          distribution: ${{ env.JAVA_DIST }}
-          java-version: ${{ env.JAVA_VERSION }}
-          cache: 'gradle'
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: ${{ env.GRADLE_VERSION }}
-
-      - name: Build Linux release (DEB)
+      - name: Generate Linux runner (first time only)
         working-directory: ${{ steps.dir.outputs.dir }}
-        run: gradle packageDeb --no-daemon
+        run: |
+          set -euo pipefail
+          flutter config --enable-linux-desktop
+          if [ ! -d linux ]; then
+            flutter create . --platforms=linux --project-name automation_hub_desktop --org com.automationhub
+          fi
+
+      - name: Apply app icon (GTK window icon)
+        working-directory: ${{ steps.dir.outputs.dir }}
+        run: |
+          set -euo pipefail
+          # app_icon_256.png ships inside flutter_assets; my_application.cc sets it on the GTK window at start-up
+          python3 - <<'PY'
+          p = 'linux/runner/my_application.cc'
+          s = open(p).read()
+          if 'app_icon_256.png' not in s:
+              hook = 'gtk_widget_show(GTK_WIDGET(window));'
+              inject = hook + '''
+            {
+              g_autofree gchar* exe = g_file_read_link("/proc/self/exe", nullptr);
+              if (exe != nullptr) {
+                g_autofree gchar* dir = g_path_get_dirname(exe);
+                g_autofree gchar* icon = g_build_filename(dir, "data", "flutter_assets", "assets", "icon", "app_icon_256.png", nullptr);
+                gtk_window_set_icon_from_file(window, icon, nullptr);
+              }
+            }'''
+              s = s.replace(hook, inject, 1)
+              open(p, 'w').write(s)
+          PY
+          sed -i 's/"automation_hub_desktop"/"Meta Hawladar"/g' linux/runner/my_application.cc || true
+          grep -n "app_icon_256" linux/runner/my_application.cc || echo "::warning::could not patch my_application.cc (default icon kept)"
+
+      - name: Pub get
+        working-directory: ${{ steps.dir.outputs.dir }}
+        run: flutter pub get
+
+      - name: Build Linux release
+        working-directory: ${{ steps.dir.outputs.dir }}
+        run: flutter build linux --release --dart-define=BUILD=${{ env.BUILD_PROFILE }}
 
       - name: Package
         id: pkg
         working-directory: ${{ steps.dir.outputs.dir }}
         run: |
           set -euo pipefail
-          OUT="MetaMonjurul-linux-x64-v${{ steps.dir.outputs.version }}"
-          DEB=$(find build/compose -name '*.deb' | head -n1)
-          [ -n "$DEB" ] || { echo "::error::.deb not found"; exit 1; }
+          OUT="MetaHawladar-${BUILD_PROFILE}-linux-x64-v${{ steps.dir.outputs.version }}"
+          BUNDLE=$(find build/linux -type d -path '*/release/bundle' | head -n1)
+          [ -n "$BUNDLE" ] || { echo "::error::bundle not found"; exit 1; }
           mkdir -p "$RUNNER_TEMP/dist/$OUT"
-          cp "$DEB" "$RUNNER_TEMP/dist/$OUT/"
+          cp -r "$BUNDLE"/. "$RUNNER_TEMP/dist/$OUT/"
           cp README.md "$RUNNER_TEMP/dist/$OUT/" || true
           tar -C "$RUNNER_TEMP/dist" -czf "$RUNNER_TEMP/dist/$OUT.tar.gz" "$OUT"
           echo "path=$RUNNER_TEMP/dist/$OUT.tar.gz" >> "$GITHUB_OUTPUT"
@@ -235,48 +307,69 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Locate Gradle project
+      - name: Locate Flutter project
         id: dir
         run: |
           set -euo pipefail
           DIR="${PROJECT_DIR}"
           if [ "$DIR" = "auto" ]; then
-            for c in . desktop meta-monjurul MetaMonjurul; do
-              if [ -f "$c/build.gradle.kts" ]; then DIR="$c"; break; fi
+            for c in . desktop automation_hub_desktop; do
+              if [ -f "$c/pubspec.yaml" ]; then DIR="$c"; break; fi
             done
           fi
-          if [ ! -f "$DIR/build.gradle.kts" ]; then echo "::error::build.gradle.kts not found"; exit 1; fi
-          VERSION=$(grep -E '^version[[:space:]]*=' "$DIR/build.gradle.kts" | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ ! -f "$DIR/pubspec.yaml" ]; then echo "::error::pubspec.yaml not found"; exit 1; fi
+          VERSION=$(grep -E '^version:' "$DIR/pubspec.yaml" | head -n1 | sed -E 's/version:[[:space:]]*//; s/\+.*//')
           echo "dir=$DIR" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Set up JDK
-        uses: actions/setup-java@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
-          distribution: ${{ env.JAVA_DIST }}
-          java-version: ${{ env.JAVA_VERSION }}
-          cache: 'gradle'
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: ${{ env.GRADLE_VERSION }}
-
-      - name: Build macOS release (DMG)
+      - name: Generate macOS runner (first time only)
         working-directory: ${{ steps.dir.outputs.dir }}
-        run: gradle packageDmg --no-daemon
+        run: |
+          set -euo pipefail
+          flutter config --enable-macos-desktop
+          if [ ! -d macos ]; then
+            flutter create . --platforms=macos --project-name automation_hub_desktop --org com.automationhub
+          fi
+          # app icon (replaces the Flutter default icon set)
+          ICONSET=macos/Runner/Assets.xcassets/AppIcon.appiconset
+          for s in 16 32 64 128 256 512 1024; do cp -f "assets/icon/macos/app_icon_$s.png" "$ICONSET/app_icon_$s.png"; done
+          sed -i '' 's/PRODUCT_NAME = automation_hub_desktop/PRODUCT_NAME = Meta Hawladar/' macos/Runner/Configs/AppInfo.xcconfig || true
+          # The app talks to Firebase / R2 / GitHub and opens local files.
+          for f in macos/Runner/DebugProfile.entitlements macos/Runner/Release.entitlements; do
+            if ! grep -q 'com.apple.security.network.client' "$f"; then
+              /usr/libexec/PlistBuddy -c 'Add :com.apple.security.network.client bool true' "$f"
+            fi
+            if ! grep -q 'com.apple.security.files.user-selected.read-write' "$f"; then
+              /usr/libexec/PlistBuddy -c 'Add :com.apple.security.files.user-selected.read-write bool true' "$f"
+            fi
+          done
+
+      - name: Pub get
+        working-directory: ${{ steps.dir.outputs.dir }}
+        run: flutter pub get
+
+      - name: Build macOS release
+        working-directory: ${{ steps.dir.outputs.dir }}
+        run: flutter build macos --release --dart-define=BUILD=${{ env.BUILD_PROFILE }}
 
       - name: Package
         id: pkg
         working-directory: ${{ steps.dir.outputs.dir }}
         run: |
           set -euo pipefail
-          OUT="MetaMonjurul-macos-v${{ steps.dir.outputs.version }}"
-          DMG=$(find build/compose -name '*.dmg' | head -n1)
-          [ -n "$DMG" ] || { echo "::error::.dmg not found"; exit 1; }
+          OUT="MetaHawladar-${BUILD_PROFILE}-macos-v${{ steps.dir.outputs.version }}"
+          APP=$(find build/macos -type d -name '*.app' -path '*/Release/*' | head -n1)
+          [ -n "$APP" ] || { echo "::error::.app not found"; exit 1; }
           mkdir -p "$RUNNER_TEMP/dist"
-          cp "$DMG" "$RUNNER_TEMP/dist/$OUT.dmg"
-          echo "path=$RUNNER_TEMP/dist/$OUT.dmg" >> "$GITHUB_OUTPUT"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$RUNNER_TEMP/dist/$OUT.zip"
+          echo "path=$RUNNER_TEMP/dist/$OUT.zip" >> "$GITHUB_OUTPUT"
           echo "name=$OUT" >> "$GITHUB_OUTPUT"
 
       - name: Upload artifact
@@ -303,13 +396,13 @@ jobs:
       - name: Publish
         uses: softprops/action-gh-release@v2
         with:
-          name: Meta Monjurul Desktop ${{ github.ref_name }}
+          name: Meta Hawladar Desktop ${{ github.ref_name }} (${{ env.BUILD_PROFILE }})
           files: dist/**
           generate_release_notes: true
           body: |
-            Meta Monjurul desktop app **${{ github.ref_name }}**.
+            Meta Hawladar desktop app **${{ github.ref_name }}** - profile `${{ env.BUILD_PROFILE }}`.
 
-            * Windows (recommended): run `MetaMonjurul-windows-x64-setup-v....msi` -> Next -> Install (Start-menu + Desktop shortcut, uninstall from Apps & features). Unsigned build: if SmartScreen shows "Windows protected your PC", click *More info -> Run anyway*.
-            * Windows portable: extract `MetaMonjurul-windows-x64-v....zip` and run the `.exe` (keep all files together).
-            * Linux: install the `.deb` from the tarball (`sudo apt install ./....deb`).
-            * macOS: open the `.dmg`, drag the app to Applications (unsigned build: right-click -> Open).
+            * Windows (recommended): run `MetaHawladar-...-windows-x64-setup-v....exe` -> Next -> Install (Start-menu + Desktop shortcut, uninstall from Apps & features). Unsigned build: if SmartScreen shows "Windows protected your PC", click *More info -> Run anyway*.
+            * Windows portable: extract `MetaHawladar-...-windows-x64-v....zip` and run `MetaHawladar.exe` (keep all files together).
+            * Linux: extract the tar.gz, `chmod +x automation_hub_desktop`, needs `libmpv` (`sudo apt install mpv`).
+            * macOS: unzip, right-click the app -> Open (unsigned build).
